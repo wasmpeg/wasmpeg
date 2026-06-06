@@ -158,3 +158,78 @@ static int init_pipeline(AVFilterContext *avctx, WGPUDevice device)
     s->initialized = 1;
     return 0;
 }
+
+static int scale_webgpu_filter_frame(AVFilterLink *inlink, AVFrame *in)
+{
+    AVFilterContext      *avctx   = inlink->dst;
+    ScaleWebGPUContext   *s       = avctx->priv;
+    AVFilterLink         *outlink = avctx->outputs[0];
+    AVHWFramesContext    *in_hwfc = (AVHWFramesContext *)ff_filter_link(inlink)->hw_frames_ctx->data;
+    AVWebGPUDeviceContext *wgpu   = in_hwfc->device_ctx->hwctx;
+    AVWebGPUFrame        *in_f   = (AVWebGPUFrame *)in->data[0];
+    int ret;
+
+    if (!s->initialized) {
+        ret = init_pipeline(avctx, wgpu->device);
+        if (ret < 0)
+            goto fail;
+    }
+
+    AVFrame *out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    if (!out) { ret = AVERROR(ENOMEM); goto fail; }
+
+    AVWebGPUFrame *out_f = (AVWebGPUFrame *)out->data[0];
+
+    WGPUBindGroupEntry bg_entries[] = {
+        { .binding = 0, .textureView = in_f->view  },
+        { .binding = 1, .sampler     = s->sampler  },
+        { .binding = 2, .textureView = out_f->view },
+    };
+    WGPUBindGroupDescriptor bg_desc = {
+        .layout     = s->bind_group_layout,
+        .entryCount = FF_ARRAY_ELEMS(bg_entries),
+        .entries    = bg_entries,
+    };
+    WGPUBindGroup bind_group = wgpuDeviceCreateBindGroup(wgpu->device, &bg_desc);
+    if (!bind_group) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to create bind group.\n");
+        av_frame_free(&out);
+        ret = AVERROR_EXTERNAL;
+        goto fail;
+    }
+
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(wgpu->device, NULL);
+    WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, NULL);
+
+    wgpuComputePassEncoderSetPipeline(pass, s->pipeline);
+    wgpuComputePassEncoderSetBindGroup(pass, 0, bind_group, 0, NULL);
+    wgpuComputePassEncoderDispatchWorkgroups(
+        pass,
+        (outlink->w + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE,
+        (outlink->h + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE,
+        1);
+    wgpuComputePassEncoderEnd(pass);
+    wgpuComputePassEncoderRelease(pass);
+
+    WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, NULL);
+    wgpuQueueSubmit(wgpu->queue, 1, &commands);
+    wgpuCommandBufferRelease(commands);
+    wgpuCommandEncoderRelease(encoder);
+    wgpuBindGroupRelease(bind_group);
+
+    ret = av_frame_copy_props(out, in);
+    if (ret < 0) { av_frame_free(&out); goto fail; }
+
+    out->width  = outlink->w;
+    out->height = outlink->h;
+    if (out->width != in->width || out->height != in->height)
+        av_frame_side_data_remove_by_props(&out->side_data, &out->nb_side_data,
+                                           AV_SIDE_DATA_PROP_SIZE_DEPENDENT);
+
+    av_frame_free(&in);
+    return ff_filter_frame(outlink, out);
+
+fail:
+    av_frame_free(&in);
+    return ret;
+}
