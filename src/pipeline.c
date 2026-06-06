@@ -370,3 +370,129 @@ fail:
     memset(s, 0, sizeof(*s));
     return ret;
 }
+
+EMSCRIPTEN_KEEPALIVE int decoder_width(int h)   { return (h>=0&&h<MAX_SESSIONS&&g_sessions[h].active)?g_sessions[h].width  :-1; }
+EMSCRIPTEN_KEEPALIVE int decoder_height(int h)  { return (h>=0&&h<MAX_SESSIONS&&g_sessions[h].active)?g_sessions[h].height :-1; }
+EMSCRIPTEN_KEEPALIVE int decoder_fps_num(int h) { return (h>=0&&h<MAX_SESSIONS&&g_sessions[h].active)?g_sessions[h].fps_num:-1; }
+EMSCRIPTEN_KEEPALIVE int decoder_fps_den(int h) { return (h>=0&&h<MAX_SESSIONS&&g_sessions[h].active)?g_sessions[h].fps_den:-1; }
+
+EMSCRIPTEN_KEEPALIVE
+int decoder_next_frame(int handle, uint8_t *dst_rgba, int dst_w, int dst_h)
+{
+    if (handle < 0 || handle >= MAX_SESSIONS || !g_sessions[handle].active)
+        return AVERROR(EINVAL);
+    DecodeSession *s = &g_sessions[handle];
+
+    for (;;) {
+        int ret = avcodec_receive_frame(s->codec_ctx, s->frame);
+        if (ret == 0) {
+            int out_w = (dst_w > 0) ? dst_w : s->frame->width;
+            int out_h = (dst_h > 0) ? dst_h : s->frame->height;
+
+            if (!s->sws
+                || s->sws_src_w   != s->frame->width
+                || s->sws_src_h   != s->frame->height
+                || s->sws_src_fmt != s->frame->format
+                || s->sws_dst_w   != out_w
+                || s->sws_dst_h   != out_h) {
+                sws_freeContext(s->sws);
+                s->sws = sws_getContext(
+                    s->frame->width, s->frame->height, s->frame->format,
+                    out_w, out_h, AV_PIX_FMT_RGBA,
+                    SWS_BILINEAR, NULL, NULL, NULL);
+                if (!s->sws) { av_frame_unref(s->frame); return AVERROR(ENOMEM); }
+                s->sws_src_w   = s->frame->width;
+                s->sws_src_h   = s->frame->height;
+                s->sws_src_fmt = s->frame->format;
+                s->sws_dst_w   = out_w;
+                s->sws_dst_h   = out_h;
+            }
+            uint8_t *dst_data[1]   = { dst_rgba };
+            int      dst_stride[1] = { out_w * 4 };
+            sws_scale(s->sws,
+                      (const uint8_t *const *)s->frame->data, s->frame->linesize,
+                      0, s->frame->height, dst_data, dst_stride);
+            s->width  = s->frame->width;
+            s->height = s->frame->height;
+            av_frame_unref(s->frame);
+            return 0;
+        }
+        if (ret != AVERROR(EAGAIN)) return ret == AVERROR_EOF ? 1 : ret;
+
+        for (;;) {
+            ret = av_read_frame(s->fmt_ctx, s->pkt);
+            if (ret < 0) {
+                avcodec_send_packet(s->codec_ctx, NULL);
+                break;
+            }
+            if (s->pkt->stream_index == s->video_stream) {
+                ret = avcodec_send_packet(s->codec_ctx, s->pkt);
+                av_packet_unref(s->pkt);
+                if (ret < 0) return ret;
+                break;
+            }
+            av_packet_unref(s->pkt);
+        }
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE
+void decoder_close(int handle)
+{
+    if (handle < 0 || handle >= MAX_SESSIONS || !g_sessions[handle].active) return;
+    DecodeSession *s = &g_sessions[handle];
+    sws_freeContext(s->sws);
+    av_packet_free(&s->pkt);
+    av_frame_free(&s->frame);
+    avcodec_free_context(&s->codec_ctx);
+    avformat_close_input(&s->fmt_ctx);
+    if (s->avio_ctx) { av_freep(&s->avio_ctx->buffer); avio_context_free(&s->avio_ctx); }
+    av_free(s->membuf.data);
+    memset(s, 0, sizeof(*s));
+}
+
+/* ------------------------------------------------------------ benchmarks */
+
+EMSCRIPTEN_KEEPALIVE
+double bench_scale_webgpu(int src_w, int src_h, int dst_w, int dst_h, int n)
+{
+#ifdef CONFIG_WEBGPU
+    char fg[64];
+    snprintf(fg, sizeof(fg), "scale_webgpu=%d:%d", dst_w, dst_h);
+
+    uint8_t *src = (uint8_t *)av_malloc(src_w * src_h * 4);
+    uint8_t *dst = (uint8_t *)av_malloc(dst_w * dst_h * 4);
+    if (!src || !dst) { av_free(src); av_free(dst); return -1.0; }
+    memset(src, 128, src_w * src_h * 4);
+
+    double t0 = emscripten_get_now();
+    for (int i = 0; i < n; i++)
+        pipeline_run_rgba_gpu(src, src_w, src_h, dst, dst_w, dst_h, fg);
+    double elapsed = (emscripten_get_now() - t0) / n;
+
+    av_free(src); av_free(dst);
+    return elapsed;
+#else
+    return -1.0;
+#endif
+}
+
+EMSCRIPTEN_KEEPALIVE
+double bench_scale_cpu(int src_w, int src_h, int dst_w, int dst_h, int n)
+{
+    char fg[64];
+    snprintf(fg, sizeof(fg), "scale=%d:%d", dst_w, dst_h);
+
+    uint8_t *src = (uint8_t *)av_malloc(src_w * src_h * 4);
+    uint8_t *dst = (uint8_t *)av_malloc(dst_w * dst_h * 4);
+    if (!src || !dst) { av_free(src); av_free(dst); return -1.0; }
+    memset(src, 128, src_w * src_h * 4);
+
+    double t0 = emscripten_get_now();
+    for (int i = 0; i < n; i++)
+        pipeline_run_rgba(src, src_w, src_h, dst, dst_w, dst_h, fg);
+    double elapsed = (emscripten_get_now() - t0) / n;
+
+    av_free(src); av_free(dst);
+    return elapsed;
+}
