@@ -233,3 +233,98 @@ fail:
     av_frame_free(&in);
     return ret;
 }
+
+static int scale_webgpu_config_output(AVFilterLink *outlink)
+{
+    AVFilterContext    *avctx  = outlink->src;
+    ScaleWebGPUContext *s      = avctx->priv;
+    AVFilterLink       *inlink = avctx->inputs[0];
+    FilterLink         *inl    = ff_filter_link(inlink);
+    FilterLink         *outl   = ff_filter_link(outlink);
+    AVHWFramesContext  *in_hwfc, *out_hwfc;
+    AVBufferRef        *out_frames_ref;
+    int ret;
+
+    if (!inl->hw_frames_ctx) {
+        av_log(avctx, AV_LOG_ERROR, "No hw_frames_ctx on input.\n");
+        return AVERROR(EINVAL);
+    }
+    in_hwfc = (AVHWFramesContext *)inl->hw_frames_ctx->data;
+    if (in_hwfc->format != AV_PIX_FMT_WEBGPU) {
+        av_log(avctx, AV_LOG_ERROR, "Input must be AV_PIX_FMT_WEBGPU.\n");
+        return AVERROR(EINVAL);
+    }
+
+    ret = ff_scale_eval_dimensions(s, s->w_expr, s->h_expr, inlink, outlink,
+                                   &s->out_width, &s->out_height);
+    if (ret < 0)
+        return ret;
+
+    ff_scale_adjust_dimensions(inlink, &s->out_width, &s->out_height,
+                               SCALE_FORCE_OAR_DISABLE, 1, 1.f);
+
+    outlink->w = s->out_width;
+    outlink->h = s->out_height;
+
+    out_frames_ref = av_hwframe_ctx_alloc(in_hwfc->device_ref);
+    if (!out_frames_ref)
+        return AVERROR(ENOMEM);
+
+    out_hwfc                    = (AVHWFramesContext *)out_frames_ref->data;
+    out_hwfc->format            = AV_PIX_FMT_WEBGPU;
+    out_hwfc->sw_format         = AV_PIX_FMT_RGBA;
+    out_hwfc->width             = s->out_width;
+    out_hwfc->height            = s->out_height;
+    out_hwfc->initial_pool_size = 4;
+
+    ret = av_hwframe_ctx_init(out_frames_ref);
+    if (ret < 0) {
+        av_buffer_unref(&out_frames_ref);
+        return ret;
+    }
+
+    av_buffer_unref(&outl->hw_frames_ctx);
+    outl->hw_frames_ctx = out_frames_ref;
+
+    return 0;
+}
+
+#define OFFSET(x) offsetof(ScaleWebGPUContext, x)
+#define FLAGS (AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_VIDEO_PARAM)
+
+static const AVOption scale_webgpu_options[] = {
+    { "w", "Output video width",  OFFSET(w_expr), AV_OPT_TYPE_STRING, { .str = "iw" }, .flags = FLAGS },
+    { "h", "Output video height", OFFSET(h_expr), AV_OPT_TYPE_STRING, { .str = "ih" }, .flags = FLAGS },
+    { NULL },
+};
+
+AVFILTER_DEFINE_CLASS(scale_webgpu);
+
+static const AVFilterPad scale_webgpu_inputs[] = {
+    {
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_VIDEO,
+        .filter_frame = scale_webgpu_filter_frame,
+    },
+};
+
+static const AVFilterPad scale_webgpu_outputs[] = {
+    {
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_VIDEO,
+        .config_props = scale_webgpu_config_output,
+    },
+};
+
+const FFFilter ff_vf_scale_webgpu = {
+    .p.name        = "scale_webgpu",
+    .p.description = NULL_IF_CONFIG_SMALL("Scale video using WebGPU (bilinear)"),
+    .p.priv_class  = &scale_webgpu_class,
+    .p.flags       = AVFILTER_FLAG_HWDEVICE,
+    .priv_size     = sizeof(ScaleWebGPUContext),
+    .uninit        = scale_webgpu_uninit,
+    FILTER_INPUTS(scale_webgpu_inputs),
+    FILTER_OUTPUTS(scale_webgpu_outputs),
+    FILTER_SINGLE_PIXFMT(AV_PIX_FMT_WEBGPU),
+    .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
+};
