@@ -57,3 +57,104 @@ typedef struct ScaleWebGPUContext {
     int out_width;
     int out_height;
 } ScaleWebGPUContext;
+
+static av_cold void scale_webgpu_uninit(AVFilterContext *avctx)
+{
+    ScaleWebGPUContext *s = avctx->priv;
+    if (s->pipeline)          wgpuComputePipelineRelease(s->pipeline);
+    if (s->pipeline_layout)   wgpuPipelineLayoutRelease(s->pipeline_layout);
+    if (s->bind_group_layout) wgpuBindGroupLayoutRelease(s->bind_group_layout);
+    if (s->sampler)           wgpuSamplerRelease(s->sampler);
+    if (s->shader_module)     wgpuShaderModuleRelease(s->shader_module);
+}
+
+static int init_pipeline(AVFilterContext *avctx, WGPUDevice device)
+{
+    ScaleWebGPUContext *s = avctx->priv;
+
+    WGPUShaderSourceWGSL wgsl_src = {
+        .chain = { .sType = WGPUSType_ShaderSourceWGSL },
+        .code  = { .data = wgsl_scale_bilinear,
+                   .length = strlen(wgsl_scale_bilinear) },
+    };
+    WGPUShaderModuleDescriptor shader_desc = {
+        .nextInChain = &wgsl_src.chain,
+    };
+    s->shader_module = wgpuDeviceCreateShaderModule(device, &shader_desc);
+    if (!s->shader_module) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to create WGSL shader module.\n");
+        return AVERROR_EXTERNAL;
+    }
+
+    WGPUBindGroupLayoutEntry bgl_entries[] = {
+        {
+            .binding    = 0,
+            .visibility = WGPUShaderStage_Compute,
+            .texture    = {
+                .sampleType    = WGPUTextureSampleType_Float,
+                .viewDimension = WGPUTextureViewDimension_2D,
+            },
+        },
+        {
+            .binding    = 1,
+            .visibility = WGPUShaderStage_Compute,
+            .sampler    = { .type = WGPUSamplerBindingType_Filtering },
+        },
+        {
+            .binding        = 2,
+            .visibility     = WGPUShaderStage_Compute,
+            .storageTexture = {
+                .access        = WGPUStorageTextureAccess_WriteOnly,
+                .format        = WGPUTextureFormat_RGBA8Unorm,
+                .viewDimension = WGPUTextureViewDimension_2D,
+            },
+        },
+    };
+    WGPUBindGroupLayoutDescriptor bgl_desc = {
+        .entryCount = FF_ARRAY_ELEMS(bgl_entries),
+        .entries    = bgl_entries,
+    };
+    s->bind_group_layout = wgpuDeviceCreateBindGroupLayout(device, &bgl_desc);
+    if (!s->bind_group_layout) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to create bind group layout.\n");
+        return AVERROR_EXTERNAL;
+    }
+
+    WGPUPipelineLayoutDescriptor pl_desc = {
+        .bindGroupLayoutCount = 1,
+        .bindGroupLayouts     = &s->bind_group_layout,
+    };
+    s->pipeline_layout = wgpuDeviceCreatePipelineLayout(device, &pl_desc);
+    if (!s->pipeline_layout) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to create pipeline layout.\n");
+        return AVERROR_EXTERNAL;
+    }
+
+    WGPUSamplerDescriptor sampler_desc = {
+        .magFilter    = WGPUFilterMode_Linear,
+        .minFilter    = WGPUFilterMode_Linear,
+        .addressModeU = WGPUAddressMode_ClampToEdge,
+        .addressModeV = WGPUAddressMode_ClampToEdge,
+    };
+    s->sampler = wgpuDeviceCreateSampler(device, &sampler_desc);
+    if (!s->sampler) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to create sampler.\n");
+        return AVERROR_EXTERNAL;
+    }
+
+    WGPUComputePipelineDescriptor cp_desc = {
+        .layout  = s->pipeline_layout,
+        .compute = {
+            .module     = s->shader_module,
+            .entryPoint = { .data = "main", .length = 4 },
+        },
+    };
+    s->pipeline = wgpuDeviceCreateComputePipeline(device, &cp_desc);
+    if (!s->pipeline) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to create compute pipeline.\n");
+        return AVERROR_EXTERNAL;
+    }
+
+    s->initialized = 1;
+    return 0;
+}
