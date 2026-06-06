@@ -1,0 +1,30 @@
+wasmpeg incorporates FFmpeg, which is licensed under the GNU Lesser General
+Public License, version 2.1 or later. The FFmpeg source is vendored in
+vendor/ffmpeg/ at a pinned release tag.
+
+FFmpeg is copyright (C) the FFmpeg developers.
+See vendor/ffmpeg/CREDITS for a full list of contributors.
+
+wasmpeg is not affiliated with or endorsed by the FFmpeg project.
+
+Modifications made to FFmpeg source files in vendor/ffmpeg/:
+  - libavutil/hwcontext_webgpu.h  (new file)
+  - libavutil/hwcontext_webgpu.c  (new file)
+  - libavfilter/vf_scale_webgpu.c (new file)
+  - tests/api/api-webgpu-test.c   (new file)
+  - tests/fate/webgpu.mak         (new file)
+  - configure                     (added --enable-webgpu + Dawn link flags)
+  - libavutil/pixfmt.h            (added AV_PIX_FMT_WEBGPU)
+  - libavutil/pixdesc.c           (added pixdesc entry for AV_PIX_FMT_WEBGPU)
+  - libavutil/hwcontext.h         (added AV_HWDEVICE_TYPE_WEBGPU)
+  - libavutil/hwcontext.c         (registered ff_hwcontext_type_webgpu)
+  - libavutil/hwcontext_internal.h (extern declaration)
+  - libavutil/Makefile            (added hwcontext_webgpu.o)
+  - libavfilter/allfilters.c      (registered scale_webgpu)
+  - libavfilter/Makefile          (added vf_scale_webgpu.o)
+  - tests/Makefile                (added FATE test)
+  - tests/api/Makefile            (added api-webgpu-test)
+
+The exact FFmpeg source version built into any wasmpeg release is identified
+by the git commit hash recorded in vendor/ffmpeg/ (see `git log vendor/ffmpeg/`).
+This satisfies the LGPL §6 obligation to make the corresponding source available.
