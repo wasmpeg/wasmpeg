@@ -319,3 +319,21 @@ static int webgpu_transfer_data_from(AVHWFramesContext *hwfc, AVFrame *dst, cons
     wgpuBufferRelease(staging_buffer);
     return 0;
 }
+
+const HWContextType ff_hwcontext_type_webgpu = {
+    .type                   = AV_HWDEVICE_TYPE_WEBGPU,
+    .name                   = "WebGPU",
+    .device_hwctx_size      = sizeof(WebGPUDevicePriv),
+    .frames_hwctx_size      = sizeof(WebGPUFramesPriv),
+    .device_create          = webgpu_device_create,
+    .device_uninit          = webgpu_device_uninit,
+    .frames_get_constraints = webgpu_frames_get_constraints,
+    .frames_init            = webgpu_frames_init,
+    .frames_get_buffer      = webgpu_get_buffer,
+    .transfer_data_to       = webgpu_transfer_data_to,
+    .transfer_data_from     = webgpu_transfer_data_from,
+    .pix_fmts               = (const enum AVPixelFormat[]) {
+        AV_PIX_FMT_WEBGPU,
+        AV_PIX_FMT_NONE
+    },
+};
