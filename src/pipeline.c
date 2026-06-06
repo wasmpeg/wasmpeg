@@ -229,3 +229,144 @@ done:
     return ret;
 }
 #endif /* CONFIG_WEBGPU */
+
+/* -------------------------------------------------- avformat decoder ---- */
+
+typedef struct {
+    uint8_t *data;
+    size_t   size;
+    size_t   pos;
+} MemBuf;
+
+static int mem_read(void *opaque, uint8_t *buf, int buf_size)
+{
+    MemBuf *m = opaque;
+    int n = (int)FFMIN((size_t)buf_size, m->size - m->pos);
+    if (n <= 0) return AVERROR_EOF;
+    memcpy(buf, m->data + m->pos, n);
+    m->pos += n;
+    return n;
+}
+
+static int64_t mem_seek(void *opaque, int64_t offset, int whence)
+{
+    MemBuf *m = opaque;
+    if (whence == AVSEEK_SIZE) return (int64_t)m->size;
+    int64_t p;
+    if      (whence == SEEK_SET) p = offset;
+    else if (whence == SEEK_CUR) p = (int64_t)m->pos + offset;
+    else if (whence == SEEK_END) p = (int64_t)m->size + offset;
+    else return -1;
+    if (p < 0 || (size_t)p > m->size) return -1;
+    m->pos = (size_t)p;
+    return p;
+}
+
+#define MAX_SESSIONS   8
+#define AVIO_BUF_SIZE  65536
+
+typedef struct {
+    int               active;
+    MemBuf            membuf;
+    AVIOContext      *avio_ctx;
+    AVFormatContext  *fmt_ctx;
+    AVCodecContext   *codec_ctx;
+    AVPacket         *pkt;
+    AVFrame          *frame;
+    struct SwsContext *sws;
+    int               video_stream;
+    int               width, height;
+    int               fps_num, fps_den;
+    int               sws_src_w, sws_src_h;
+    enum AVPixelFormat sws_src_fmt;
+    int               sws_dst_w, sws_dst_h;
+} DecodeSession;
+
+static DecodeSession g_sessions[MAX_SESSIONS];
+
+EMSCRIPTEN_KEEPALIVE
+int decoder_open(const uint8_t *data, int size)
+{
+    int slot = -1;
+    for (int i = 0; i < MAX_SESSIONS; i++)
+        if (!g_sessions[i].active) { slot = i; break; }
+    if (slot < 0) return AVERROR(ENOMEM);
+
+    DecodeSession *s = &g_sessions[slot];
+    memset(s, 0, sizeof(*s));
+
+    s->membuf.data = av_malloc(size);
+    if (!s->membuf.data) return AVERROR(ENOMEM);
+    memcpy(s->membuf.data, data, size);
+    s->membuf.size = size;
+
+    uint8_t *avio_buf = av_malloc(AVIO_BUF_SIZE);
+    if (!avio_buf) { av_free(s->membuf.data); return AVERROR(ENOMEM); }
+
+    s->avio_ctx = avio_alloc_context(avio_buf, AVIO_BUF_SIZE, 0,
+                                     &s->membuf, mem_read, NULL, mem_seek);
+    if (!s->avio_ctx) { av_free(avio_buf); av_free(s->membuf.data); return AVERROR(ENOMEM); }
+
+    s->fmt_ctx = avformat_alloc_context();
+    if (!s->fmt_ctx) {
+        av_freep(&s->avio_ctx->buffer);
+        avio_context_free(&s->avio_ctx);
+        av_free(s->membuf.data);
+        return AVERROR(ENOMEM);
+    }
+    s->fmt_ctx->pb = s->avio_ctx;
+
+    int ret = avformat_open_input(&s->fmt_ctx, NULL, NULL, NULL);
+    if (ret < 0) goto fail;
+
+    ret = avformat_find_stream_info(s->fmt_ctx, NULL);
+    if (ret < 0) goto fail;
+
+    s->video_stream = -1;
+    for (unsigned i = 0; i < s->fmt_ctx->nb_streams; i++) {
+        if (s->fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            s->video_stream = (int)i;
+            break;
+        }
+    }
+    if (s->video_stream < 0) { ret = AVERROR_STREAM_NOT_FOUND; goto fail; }
+
+    AVStream *st = s->fmt_ctx->streams[s->video_stream];
+    const AVCodec *codec = avcodec_find_decoder(st->codecpar->codec_id);
+    if (!codec) { ret = AVERROR_DECODER_NOT_FOUND; goto fail; }
+
+    s->codec_ctx = avcodec_alloc_context3(codec);
+    if (!s->codec_ctx) { ret = AVERROR(ENOMEM); goto fail; }
+
+    ret = avcodec_parameters_to_context(s->codec_ctx, st->codecpar);
+    if (ret < 0) goto fail;
+
+    ret = avcodec_open2(s->codec_ctx, codec, NULL);
+    if (ret < 0) goto fail;
+
+    s->width  = s->codec_ctx->width;
+    s->height = s->codec_ctx->height;
+    if (st->avg_frame_rate.den && st->avg_frame_rate.num) {
+        s->fps_num = st->avg_frame_rate.num;
+        s->fps_den = st->avg_frame_rate.den;
+    } else {
+        s->fps_num = 25; s->fps_den = 1;
+    }
+
+    s->pkt   = av_packet_alloc();
+    s->frame = av_frame_alloc();
+    if (!s->pkt || !s->frame) { ret = AVERROR(ENOMEM); goto fail; }
+
+    s->active = 1;
+    return slot;
+
+fail:
+    avformat_close_input(&s->fmt_ctx);
+    if (s->avio_ctx) { av_freep(&s->avio_ctx->buffer); avio_context_free(&s->avio_ctx); }
+    av_free(s->membuf.data);
+    av_packet_free(&s->pkt);
+    av_frame_free(&s->frame);
+    avcodec_free_context(&s->codec_ctx);
+    memset(s, 0, sizeof(*s));
+    return ret;
+}
