@@ -62,3 +62,32 @@ static av_always_inline void webgpu_await(WGPUInstance instance, volatile int *f
         wgpuInstanceProcessEvents(instance);
 #endif
 }
+
+static void on_adapter_ready(WGPURequestAdapterStatus status, WGPUAdapter adapter,
+                              WGPUStringView message, void *userdata1, void *userdata2)
+{
+    WebGPUDevicePriv *priv = userdata1;
+    if (status == WGPURequestAdapterStatus_Success)
+        priv->p.adapter = adapter;
+    priv->async_done = 1;
+}
+
+static void on_device_ready(WGPURequestDeviceStatus status, WGPUDevice device,
+                             WGPUStringView message, void *userdata1, void *userdata2)
+{
+    WebGPUDevicePriv *priv = userdata1;
+    if (status == WGPURequestDeviceStatus_Success) {
+        priv->p.device = device;
+        priv->p.queue  = wgpuDeviceGetQueue(device);
+    }
+    priv->async_done = 1;
+}
+
+static void on_buffer_mapped(WGPUMapAsyncStatus status, WGPUStringView message,
+                              void *userdata1, void *userdata2)
+{
+    MapContext *ctx = userdata1;
+    ctx->done  = 1;
+    if (status != WGPUMapAsyncStatus_Success)
+        ctx->error = 1;
+}
