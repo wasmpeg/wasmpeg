@@ -4,6 +4,7 @@ APITESTPROGS-$(call DEMDEC, H264, H264) += api-h264-slice
 APITESTPROGS-yes += api-seek api-dump-stream-meta
 APITESTPROGS-$(call DEMDEC, H263, H263) += api-band
 APITESTPROGS-$(HAVE_THREADS) += api-threadmessage
+APITESTPROGS-$(CONFIG_WEBGPU) += api-webgpu
 APITESTPROGS += $(APITESTPROGS-yes)
 
 APITESTOBJS  := $(APITESTOBJS:%=$(APITESTSDIR)%) $(APITESTPROGS:%=$(APITESTSDIR)/%-test.o)
