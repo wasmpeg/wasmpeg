@@ -93,3 +93,59 @@ fail:
     avfilter_graph_free(&graph);
     return NULL;
 }
+
+/* -------------------------------------------------- CPU pipeline (RGBA in/out) */
+
+EMSCRIPTEN_KEEPALIVE
+int pipeline_run_rgba(const uint8_t *src_rgba, int src_w, int src_h,
+                      uint8_t *dst_rgba,       int dst_w, int dst_h,
+                      const char *filtergraph)
+{
+    AVFilterGraph   *graph    = NULL;
+    AVFilterContext *src_ctx  = NULL, *sink_ctx = NULL;
+    AVFrame         *in = NULL, *out = NULL;
+    int ret = -1;
+
+    in = av_frame_alloc();
+    if (!in) return AVERROR(ENOMEM);
+    in->format = AV_PIX_FMT_RGBA;
+    in->width  = src_w;
+    in->height = src_h;
+    if (av_frame_get_buffer(in, 0) < 0) goto done;
+    av_image_copy_plane(in->data[0], in->linesize[0],
+                        src_rgba, src_w * 4, src_w * 4, src_h);
+
+    graph = build_graph(filtergraph, src_w, src_h, AV_PIX_FMT_RGBA,
+                        NULL, &src_ctx, &sink_ctx);
+    if (!graph) goto done;
+
+    if (av_buffersrc_add_frame_flags(src_ctx, in, AV_BUFFERSRC_FLAG_KEEP_REF) < 0)
+        goto done;
+
+    out = av_frame_alloc();
+    if (!out || av_buffersink_get_frame(sink_ctx, out) < 0) goto done;
+
+    if (out->format != AV_PIX_FMT_RGBA) {
+        struct SwsContext *sws = sws_getContext(
+            out->width, out->height, out->format,
+            dst_w, dst_h, AV_PIX_FMT_RGBA,
+            SWS_BILINEAR, NULL, NULL, NULL);
+        if (!sws) goto done;
+        uint8_t *dst_data[1] = { dst_rgba };
+        int dst_stride[1]    = { dst_w * 4 };
+        sws_scale(sws, (const uint8_t *const *)out->data, out->linesize,
+                  0, out->height, dst_data, dst_stride);
+        sws_freeContext(sws);
+    } else {
+        av_image_copy_plane(dst_rgba, dst_w * 4,
+                            out->data[0], out->linesize[0],
+                            dst_w * 4, dst_h);
+    }
+    ret = 0;
+
+done:
+    av_frame_free(&in);
+    av_frame_free(&out);
+    avfilter_graph_free(&graph);
+    return ret;
+}
