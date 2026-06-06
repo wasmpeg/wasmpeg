@@ -252,3 +252,70 @@ static int webgpu_transfer_data_to(AVHWFramesContext *hwfc, AVFrame *dst, const 
                           src->linesize[0] * src->height, &layout, &write_size);
     return 0;
 }
+
+static int webgpu_transfer_data_from(AVHWFramesContext *hwfc, AVFrame *dst, const AVFrame *src)
+{
+    WebGPUDevicePriv *priv = hwfc->device_ctx->hwctx;
+    AVWebGPUFrame *src_f   = (AVWebGPUFrame *)src->data[0];
+
+    if (dst->format != AV_PIX_FMT_RGBA) {
+        av_log(hwfc, AV_LOG_ERROR, "Only AV_PIX_FMT_RGBA destination is supported.\n");
+        return AVERROR(EINVAL);
+    }
+
+    uint32_t padded_bytes_per_row = (dst->width * 4 + 255) & ~255;
+    uint64_t buf_size = (uint64_t)padded_bytes_per_row * dst->height;
+
+    WGPUBufferDescriptor buf_desc = {
+        .usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead,
+        .size  = buf_size,
+    };
+    WGPUBuffer staging_buffer = wgpuDeviceCreateBuffer(priv->p.device, &buf_desc);
+    if (!staging_buffer)
+        return AVERROR_EXTERNAL;
+
+    WGPUCommandEncoderDescriptor enc_desc = { 0 };
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(priv->p.device, &enc_desc);
+
+    WGPUTexelCopyTextureInfo copy_src = { .texture = src_f->texture };
+    WGPUTexelCopyBufferInfo copy_buf = {
+        .buffer              = staging_buffer,
+        .layout.bytesPerRow  = padded_bytes_per_row,
+        .layout.rowsPerImage = dst->height,
+    };
+    WGPUExtent3D copy_size = { dst->width, dst->height, 1 };
+
+    wgpuCommandEncoderCopyTextureToBuffer(encoder, &copy_src, &copy_buf, &copy_size);
+
+    WGPUCommandBufferDescriptor cmd_desc = { 0 };
+    WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, &cmd_desc);
+    wgpuQueueSubmit(priv->p.queue, 1, &commands);
+    wgpuCommandBufferRelease(commands);
+    wgpuCommandEncoderRelease(encoder);
+
+    MapContext map_ctx = { .done = 0, .error = 0 };
+    WGPUBufferMapCallbackInfo cb_info = {
+        .callback  = on_buffer_mapped,
+        .mode      = WGPUCallbackMode_AllowSpontaneous,
+        .userdata1 = &map_ctx,
+    };
+
+    wgpuBufferMapAsync(staging_buffer, WGPUMapMode_Read, 0, buf_size, cb_info);
+    webgpu_await(priv->p.instance, &map_ctx.done);
+
+    if (map_ctx.error) {
+        wgpuBufferRelease(staging_buffer);
+        return AVERROR_EXTERNAL;
+    }
+
+    const uint8_t *mapped = wgpuBufferGetConstMappedRange(staging_buffer, 0, buf_size);
+    for (int y = 0; y < dst->height; y++) {
+        memcpy(dst->data[0] + y * dst->linesize[0],
+               mapped       + y * padded_bytes_per_row,
+               dst->width * 4);
+    }
+
+    wgpuBufferUnmap(staging_buffer);
+    wgpuBufferRelease(staging_buffer);
+    return 0;
+}
