@@ -72,6 +72,9 @@ static const HWContextType * const hw_table[] = {
 #if CONFIG_OHCODEC
     &ff_hwcontext_type_oh,
 #endif
+#if CONFIG_WEBGPU
+    &ff_hwcontext_type_webgpu,
+#endif
     NULL,
 };
 
