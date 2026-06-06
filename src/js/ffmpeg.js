@@ -49,3 +49,52 @@ export class FFmpeg {
             },
         });
     }
+
+    #assertLoaded() {
+        if (!this.#mod) throw new Error('call load() first');
+    }
+
+    async writeFile(path, data) {
+        this.#assertLoaded();
+        const buf = data instanceof Uint8Array ? data : new Uint8Array(await data.arrayBuffer());
+        this.#mod.FS.writeFile(path, buf);
+    }
+
+    async readFile(path) {
+        this.#assertLoaded();
+        return this.#mod.FS.readFile(path);
+    }
+
+    async deleteFile(path) {
+        this.#assertLoaded();
+        this.#mod.FS.unlink(path);
+    }
+
+    async createDir(path) {
+        this.#assertLoaded();
+        this.#mod.FS.mkdir(path);
+    }
+
+    async listDir(path) {
+        this.#assertLoaded();
+        return this.#mod.FS.readdir(path);
+    }
+
+    async exec(args, { timeout = 0 } = {}) {
+        this.#assertLoaded();
+        return new Promise((resolve, reject) => {
+            try {
+                const ret = this.#mod.callMain(args);
+                resolve(ret ?? 0);
+            } catch (e) {
+                reject(e);
+            }
+        });
+    }
+
+    terminate() {
+        this.#mod = null;
+        this.#log = [];
+        this.#prog = [];
+    }
+}
