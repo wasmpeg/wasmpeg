@@ -149,3 +149,83 @@ done:
     avfilter_graph_free(&graph);
     return ret;
 }
+
+/* ----------------------------------------------- WebGPU pipeline (RGBA in/out) */
+
+#ifdef CONFIG_WEBGPU
+#include <libavutil/hwcontext_webgpu.h>
+
+EMSCRIPTEN_KEEPALIVE
+int pipeline_run_rgba_gpu(const uint8_t *src_rgba, int src_w, int src_h,
+                           uint8_t *dst_rgba,       int dst_w, int dst_h,
+                           const char *filtergraph)
+{
+    AVBufferRef     *device_ref = NULL, *frames_ref = NULL;
+    AVFilterGraph   *graph      = NULL;
+    AVFilterContext *src_ctx    = NULL, *sink_ctx = NULL;
+    AVFrame         *sw_in  = NULL, *hw_in  = NULL;
+    AVFrame         *hw_out = NULL, *sw_out = NULL;
+    int ret = -1;
+
+    ret = av_hwdevice_ctx_create(&device_ref, AV_HWDEVICE_TYPE_WEBGPU,
+                                 NULL, NULL, 0);
+    if (ret < 0) goto done;
+
+    AVBufferRef *fr = av_hwframe_ctx_alloc(device_ref);
+    if (!fr) { ret = AVERROR(ENOMEM); goto done; }
+    AVHWFramesContext *fc = (AVHWFramesContext *)fr->data;
+    fc->format            = AV_PIX_FMT_WEBGPU;
+    fc->sw_format         = AV_PIX_FMT_RGBA;
+    fc->width             = src_w;
+    fc->height            = src_h;
+    fc->initial_pool_size = 4;
+    ret = av_hwframe_ctx_init(fr);
+    if (ret < 0) { av_buffer_unref(&fr); goto done; }
+    frames_ref = fr;
+
+    sw_in = av_frame_alloc();
+    if (!sw_in) { ret = AVERROR(ENOMEM); goto done; }
+    sw_in->format = AV_PIX_FMT_RGBA;
+    sw_in->width  = src_w;
+    sw_in->height = src_h;
+    if (av_frame_get_buffer(sw_in, 0) < 0) goto done;
+    av_image_copy_plane(sw_in->data[0], sw_in->linesize[0],
+                        src_rgba, src_w * 4, src_w * 4, src_h);
+
+    hw_in = av_frame_alloc();
+    if (!hw_in) goto done;
+    if (av_hwframe_get_buffer(frames_ref, hw_in, 0) < 0) goto done;
+    if (av_hwframe_transfer_data(hw_in, sw_in, 0) < 0) goto done;
+
+    graph = build_graph(filtergraph, src_w, src_h, AV_PIX_FMT_WEBGPU,
+                        frames_ref, &src_ctx, &sink_ctx);
+    if (!graph) goto done;
+
+    if (av_buffersrc_add_frame_flags(src_ctx, hw_in, AV_BUFFERSRC_FLAG_KEEP_REF) < 0)
+        goto done;
+
+    hw_out = av_frame_alloc();
+    if (!hw_out || av_buffersink_get_frame(sink_ctx, hw_out) < 0) goto done;
+
+    sw_out = av_frame_alloc();
+    if (!sw_out) goto done;
+    sw_out->format = AV_PIX_FMT_RGBA;
+    sw_out->width  = dst_w;
+    sw_out->height = dst_h;
+    if (av_frame_get_buffer(sw_out, 0) < 0) goto done;
+    if (av_hwframe_transfer_data(sw_out, hw_out, 0) < 0) goto done;
+
+    av_image_copy_plane(dst_rgba, dst_w * 4,
+                        sw_out->data[0], sw_out->linesize[0],
+                        dst_w * 4, dst_h);
+    ret = 0;
+
+done:
+    av_frame_free(&sw_in);  av_frame_free(&hw_in);
+    av_frame_free(&hw_out); av_frame_free(&sw_out);
+    avfilter_graph_free(&graph);
+    av_buffer_unref(&frames_ref);
+    av_buffer_unref(&device_ref);
+    return ret;
+}
+#endif /* CONFIG_WEBGPU */
