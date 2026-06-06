@@ -230,3 +230,25 @@ static int webgpu_get_buffer(AVHWFramesContext *hwfc, AVFrame *frame)
     }
     return 0;
 }
+
+static int webgpu_transfer_data_to(AVHWFramesContext *hwfc, AVFrame *dst, const AVFrame *src)
+{
+    WebGPUDevicePriv *priv = hwfc->device_ctx->hwctx;
+    AVWebGPUFrame *dst_f   = (AVWebGPUFrame *)dst->data[0];
+
+    if (src->format != AV_PIX_FMT_RGBA) {
+        av_log(hwfc, AV_LOG_ERROR, "Only AV_PIX_FMT_RGBA source is supported.\n");
+        return AVERROR(EINVAL);
+    }
+
+    WGPUTexelCopyTextureInfo copy_dest = { .texture = dst_f->texture };
+    WGPUTexelCopyBufferLayout layout = {
+        .bytesPerRow  = src->linesize[0],
+        .rowsPerImage = src->height,
+    };
+    WGPUExtent3D write_size = { src->width, src->height, 1 };
+
+    wgpuQueueWriteTexture(priv->p.queue, &copy_dest, src->data[0],
+                          src->linesize[0] * src->height, &layout, &write_size);
+    return 0;
+}
