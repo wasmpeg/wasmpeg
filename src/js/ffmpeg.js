@@ -27,3 +27,25 @@ export class FFmpeg {
         if (event === 'progress') this.#prog = this.#prog.filter(h => h !== handler);
         return this;
     }
+
+    async load({ wasmPath } = {}) {
+        if (this.#mod) return;
+
+        const path = wasmPath ?? (
+            typeof navigator !== 'undefined' && navigator.gpu
+                ? new URL('../../dist/webgpu.js', import.meta.url).href
+                : new URL('../../dist/cpu.js',    import.meta.url).href
+        );
+
+        const emit = (type, message) => this.#log.forEach(h => h({ type, message }));
+
+        const { default: factory } = await import(/* @vite-ignore */ path);
+        this.#mod = await factory({
+            print:    msg => emit('stdout', msg),
+            printErr: msg => {
+                emit('stderr', msg);
+                const m = msg.match(/time=(\S+)/);
+                if (m) this.#prog.forEach(h => h({ progress: m[1] }));
+            },
+        });
+    }
