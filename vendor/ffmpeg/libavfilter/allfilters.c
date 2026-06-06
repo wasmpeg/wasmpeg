@@ -451,6 +451,7 @@ extern const FFFilter ff_vf_scale_qsv;
 extern const FFFilter ff_vf_scale_vaapi;
 extern const FFFilter ff_vf_scale_vt;
 extern const FFFilter ff_vf_scale_vulkan;
+extern const FFFilter ff_vf_scale_webgpu;
 extern const FFFilter ff_vf_scale2ref;
 extern const FFFilter ff_vf_scale2ref_npp;
 extern const FFFilter ff_vf_scdet;
