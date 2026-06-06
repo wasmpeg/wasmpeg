@@ -91,3 +91,60 @@ static void on_buffer_mapped(WGPUMapAsyncStatus status, WGPUStringView message,
     if (status != WGPUMapAsyncStatus_Success)
         ctx->error = 1;
 }
+
+static int webgpu_device_create(AVHWDeviceContext *ctx, const char *device,
+                                AVDictionary *opts, int flags)
+{
+    WebGPUDevicePriv *priv = ctx->hwctx;
+    WGPUInstanceDescriptor desc = { 0 };
+
+    priv->p.instance = wgpuCreateInstance(&desc);
+    if (!priv->p.instance) {
+        av_log(ctx, AV_LOG_ERROR, "Could not initialize WebGPU instance.\n");
+        return AVERROR_UNKNOWN;
+    }
+
+    WGPURequestAdapterOptions adapter_opts = { 0 };
+    WGPURequestAdapterCallbackInfo adapter_cb = {
+        .callback  = on_adapter_ready,
+        .mode      = WGPUCallbackMode_AllowSpontaneous,
+        .userdata1 = priv,
+    };
+
+    priv->async_done = 0;
+    wgpuInstanceRequestAdapter(priv->p.instance, &adapter_opts, adapter_cb);
+    webgpu_await(priv->p.instance, &priv->async_done);
+
+    if (!priv->p.adapter) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to get WebGPU adapter.\n");
+        return AVERROR_UNKNOWN;
+    }
+
+    WGPUDeviceDescriptor dev_desc = { 0 };
+    WGPURequestDeviceCallbackInfo device_cb = {
+        .callback  = on_device_ready,
+        .mode      = WGPUCallbackMode_AllowSpontaneous,
+        .userdata1 = priv,
+    };
+
+    priv->async_done = 0;
+    wgpuAdapterRequestDevice(priv->p.adapter, &dev_desc, device_cb);
+    webgpu_await(priv->p.instance, &priv->async_done);
+
+    if (!priv->p.device) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to get WebGPU device.\n");
+        return AVERROR_UNKNOWN;
+    }
+
+    av_log(ctx, AV_LOG_VERBOSE, "WebGPU device created successfully.\n");
+    return 0;
+}
+
+static void webgpu_device_uninit(AVHWDeviceContext *ctx)
+{
+    WebGPUDevicePriv *priv = ctx->hwctx;
+    if (priv->p.queue)    wgpuQueueRelease(priv->p.queue);
+    if (priv->p.device)   wgpuDeviceRelease(priv->p.device);
+    if (priv->p.adapter)  wgpuAdapterRelease(priv->p.adapter);
+    if (priv->p.instance) wgpuInstanceRelease(priv->p.instance);
+}
