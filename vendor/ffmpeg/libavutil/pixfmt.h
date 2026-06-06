@@ -499,6 +499,8 @@ enum AVPixelFormat {
 
     AV_PIX_FMT_OHCODEC, /// hardware decoding through openharmony
 
+    AV_PIX_FMT_WEBGPU,  ///< WebGPU hardware surface (AVWebGPUFrame)
+
     AV_PIX_FMT_NB         ///< number of pixel formats, DO NOT USE THIS if you want to link with shared libav* because the number of formats might differ between versions
 };
 
