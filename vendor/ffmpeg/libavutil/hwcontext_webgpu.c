@@ -148,3 +148,85 @@ static void webgpu_device_uninit(AVHWDeviceContext *ctx)
     if (priv->p.adapter)  wgpuAdapterRelease(priv->p.adapter);
     if (priv->p.instance) wgpuInstanceRelease(priv->p.instance);
 }
+
+static int webgpu_frames_get_constraints(AVHWDeviceContext *ctx,
+                                         const void *hwconfig,
+                                         AVHWFramesConstraints *constraints)
+{
+    constraints->valid_sw_formats = av_malloc_array(2, sizeof(*constraints->valid_sw_formats));
+    if (!constraints->valid_sw_formats)
+        return AVERROR(ENOMEM);
+    constraints->valid_sw_formats[0] = AV_PIX_FMT_RGBA;
+    constraints->valid_sw_formats[1] = AV_PIX_FMT_NONE;
+
+    constraints->valid_hw_formats = av_malloc_array(2, sizeof(*constraints->valid_hw_formats));
+    if (!constraints->valid_hw_formats)
+        return AVERROR(ENOMEM);
+    constraints->valid_hw_formats[0] = AV_PIX_FMT_WEBGPU;
+    constraints->valid_hw_formats[1] = AV_PIX_FMT_NONE;
+
+    return 0;
+}
+
+static int webgpu_frames_init(AVHWFramesContext *hwfc)
+{
+    WebGPUFramesPriv *fpriv = hwfc->hwctx;
+
+    if (hwfc->sw_format != AV_PIX_FMT_RGBA) {
+        av_log(hwfc, AV_LOG_ERROR, "Only AV_PIX_FMT_RGBA is supported as sw_format.\n");
+        return AVERROR(EINVAL);
+    }
+
+    if (!fpriv->p.usage)
+        fpriv->p.usage = DEFAULT_TEXTURE_USAGE;
+    if (!fpriv->p.format)
+        fpriv->p.format = WGPUTextureFormat_RGBA8Unorm;
+
+    return 0;
+}
+
+static void webgpu_frame_free(void *opaque, uint8_t *data)
+{
+    AVWebGPUFrame *f = (AVWebGPUFrame *)data;
+    if (f->view)    wgpuTextureViewRelease(f->view);
+    if (f->texture) wgpuTextureRelease(f->texture);
+    av_free(f);
+}
+
+static int webgpu_get_buffer(AVHWFramesContext *hwfc, AVFrame *frame)
+{
+    WebGPUDevicePriv *priv  = hwfc->device_ctx->hwctx;
+    WebGPUFramesPriv *fpriv = hwfc->hwctx;
+
+    AVWebGPUFrame *f = av_mallocz(sizeof(AVWebGPUFrame));
+    if (!f)
+        return AVERROR(ENOMEM);
+
+    WGPUTextureDescriptor tex_desc = {
+        .usage         = fpriv->p.usage,
+        .dimension     = WGPUTextureDimension_2D,
+        .size          = (WGPUExtent3D){ hwfc->width, hwfc->height, 1 },
+        .format        = fpriv->p.format,
+        .mipLevelCount = 1,
+        .sampleCount   = 1,
+    };
+
+    f->texture = wgpuDeviceCreateTexture(priv->p.device, &tex_desc);
+    if (!f->texture) {
+        av_free(f);
+        return AVERROR_EXTERNAL;
+    }
+    f->view = wgpuTextureCreateView(f->texture, NULL);
+
+    frame->data[0] = (uint8_t *)f;
+    frame->format  = AV_PIX_FMT_WEBGPU;
+    frame->width   = hwfc->width;
+    frame->height  = hwfc->height;
+    frame->buf[0]  = av_buffer_create((uint8_t *)f, sizeof(AVWebGPUFrame),
+                                      webgpu_frame_free, hwfc, 0);
+    if (!frame->buf[0]) {
+        webgpu_frame_free(hwfc, (uint8_t *)f);
+        return AVERROR(ENOMEM);
+    }
+    return 0;
+}
