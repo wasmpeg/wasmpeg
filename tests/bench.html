@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>wasmpeg benchmark</title>
+<style>
+  body { font-family: monospace; max-width: 700px; margin: 40px auto; padding: 0 20px; }
+  h1 { font-size: 1.2em; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1em; }
+  th, td { border: 1px solid #ccc; padding: 6px 12px; text-align: right; }
+  th { background: #f5f5f5; text-align: left; }
+  td:first-child { text-align: left; }
+  .win { background: #d4edda; }
+  #log { margin-top: 1em; white-space: pre; font-size: 0.85em; color: #555; }
+  button { margin-top: 1em; padding: 8px 20px; cursor: pointer; }
+</style>
+</head>
+<body>
+<h1>wasmpeg — GPU vs CPU benchmark</h1>
+<p>Measures average ms/frame for bilinear scaling via <code>scale_webgpu</code> (GPU) and <code>scale</code> (CPU swscale).</p>
+
+<label>Source: <input id="srcW" type="number" value="1920" style="width:60px"> × <input id="srcH" type="number" value="1080" style="width:60px"></label><br>
+<label>Output: <input id="dstW" type="number" value="1280" style="width:60px"> × <input id="dstH" type="number" value="720" style="width:60px"></label><br>
+<label>Iterations: <input id="iters" type="number" value="50" style="width:60px"></label>
+<br>
+<button onclick="runBench()">Run benchmark</button>
+
+<table id="results" style="display:none">
+  <tr><th>Path</th><th>ms/frame</th><th>FPS equiv.</th><th>vs CPU</th></tr>
+  <tr><td>GPU (scale_webgpu)</td><td id="gpuMs">—</td><td id="gpuFps">—</td><td id="gpuVs">—</td></tr>
+  <tr><td>CPU (swscale)</td>      <td id="cpuMs">—</td><td id="cpuFps">—</td><td>baseline</td></tr>
+</table>
+
+<div id="log"></div>
+
+<script type="module">
+import { gpu } from '../src/js/index.js';
+
+async function init() {
+    log('Loading...');
+    try {
+        await gpu.load();
+        log(`Ready — WebGPU: ${gpu.hasWebGPU()}`);
+    } catch (e) {
+        log(`Failed to load: ${e.message}`);
+    }
+}
+
+window.runBench = async function() {
+    const srcW  = +document.getElementById('srcW').value;
+    const srcH  = +document.getElementById('srcH').value;
+    const dstW  = +document.getElementById('dstW').value;
+    const dstH  = +document.getElementById('dstH').value;
+    const iters = +document.getElementById('iters').value;
+
+    log(`Benchmarking ${srcW}x${srcH} → ${dstW}x${dstH}, ${iters} iterations...`);
+
+    const gpuMs = gpu.benchGpu(srcW, srcH, dstW, dstH, iters);
+    const cpuMs = gpu.benchCpu(srcW, srcH, dstW, dstH, iters);
+
+    log(`GPU: ${gpuMs.toFixed(2)} ms/frame`);
+    log(`CPU: ${cpuMs.toFixed(2)} ms/frame`);
+
+    const ratio = cpuMs / gpuMs;
+    document.getElementById('gpuMs').textContent  = gpuMs.toFixed(2);
+    document.getElementById('cpuMs').textContent  = cpuMs.toFixed(2);
+    document.getElementById('gpuFps').textContent = (1000 / gpuMs).toFixed(1);
+    document.getElementById('cpuFps').textContent = (1000 / cpuMs).toFixed(1);
+    document.getElementById('gpuVs').textContent  = ratio >= 1
+        ? `${ratio.toFixed(1)}× faster`
+        : `${(1/ratio).toFixed(1)}× slower`;
+    document.getElementById('gpuVs').parentElement.className = ratio >= 1 ? 'win' : '';
+    document.getElementById('results').style.display = '';
+};
+
+function log(msg) {
+    document.getElementById('log').textContent += msg + '\n';
+}
+
+init();
+</script>
+</body>
+</html>

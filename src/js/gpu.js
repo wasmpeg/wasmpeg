@@ -113,4 +113,16 @@ function createDecoder(fileBytes) {
 
 function hasWebGPU() { return _hasGPU; }
 
-export const gpu = { load, scale, createDecoder, hasWebGPU };
+function benchGpu(srcW, srcH, dstW, dstH, iters) {
+    assertLoaded();
+    return _mod.ccall('bench_scale_webgpu', 'number',
+        ['number','number','number','number','number'], [srcW, srcH, dstW, dstH, iters]);
+}
+
+function benchCpu(srcW, srcH, dstW, dstH, iters) {
+    assertLoaded();
+    return _mod.ccall('bench_scale_cpu', 'number',
+        ['number','number','number','number','number'], [srcW, srcH, dstW, dstH, iters]);
+}
+
+export const gpu = { load, scale, createDecoder, hasWebGPU, benchGpu, benchCpu };
