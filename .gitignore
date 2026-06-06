@@ -1,0 +1,26 @@
+# build output
+dist/
+
+# dependencies
+node_modules/
+
+# generated configure scripts (produced by src/cli/configure.mjs)
+configure-cpu.sh
+configure-webgpu.sh
+
+# native build artifacts in vendor/ffmpeg
+vendor/ffmpeg/ffbuild/
+vendor/ffmpeg/ffmpeg
+vendor/ffmpeg/ffplay
+vendor/ffmpeg/ffprobe
+vendor/ffmpeg/*.pc
+vendor/ffmpeg/config.h
+vendor/ffmpeg/config.asm
+vendor/ffmpeg/config_components.h
+
+# emscripten cache
+.emscripten_cache/
+
+# OS
+.DS_Store
+Thumbs.db
