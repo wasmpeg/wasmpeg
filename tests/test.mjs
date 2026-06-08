@@ -48,6 +48,12 @@ function makeGradient(w, h) {
     return buf;
 }
 
+async function loadWasm(jsPath) {
+    const { default: factory } = await import(jsPath);
+    const wasmBin = fs.readFileSync(jsPath.replace(/\.js$/, '.wasm'));
+    return factory({ wasmBinary: wasmBin });
+}
+
 async function testBuild(name, jsPath) {
     section(`pipeline / ${name}`);
 
@@ -56,10 +62,8 @@ async function testBuild(name, jsPath) {
         return;
     }
 
-    const { default: factory } = await import(jsPath);
-    const wasmBin = fs.readFileSync(jsPath.replace(/\.js$/, '.wasm'));
     let mod;
-    try { mod = await factory({ wasmBinary: wasmBin }); }
+    try { mod = await loadWasm(jsPath); }
     catch (e) { console.error(`  FAIL  load: ${e.message}`); failed++; return; }
 
     const ver = mod.ccall('pipeline_version', 'string', [], []);
