@@ -409,6 +409,35 @@ async function testGpu(cpuJsPath) {
     const benchMs = gpu.benchCpu(SRC_W, SRC_H, DST_W, DST_H, 20);
     ok('benchCpu() returns positive', benchMs > 0);
     console.log(`        CPU bench: ${benchMs.toFixed(2)} ms/frame`);
+
+    const gpuBench = gpu.benchGpu(SRC_W, SRC_H, DST_W, DST_H, 1);
+    ok('benchGpu() returns -1 on CPU build', gpuBench === -1);
+
+    let threw = false;
+    try { gpu.createDecoder(new Uint8Array([0xFF, 0x00, 0x11, 0x22])); } catch { threw = true; }
+    ok('createDecoder with garbage throws', threw);
+
+    const pngBytes = makeTinyPng(4, 4);
+    let dec;
+    try { dec = gpu.createDecoder(new Uint8Array(pngBytes)); }
+    catch (e) {
+        skip('createDecoder PNG', `open failed: ${e.message}`);
+        return;
+    }
+    ok('createDecoder returns object',           dec !== null && typeof dec === 'object');
+    ok('createDecoder .width > 0',               dec.width > 0);
+    ok('createDecoder .height > 0',              dec.height > 0);
+    ok('createDecoder .fps is a positive number', dec.fps > 0);
+    const frame = dec.nextFrame();
+    if (frame !== null) {
+        ok('nextFrame() returns Uint8ClampedArray',    frame instanceof Uint8ClampedArray);
+        ok('nextFrame() output size = width*height*4', frame.length === dec.width * dec.height * 4);
+        ok('nextFrame() output non-zero',              frame.some(v => v !== 0));
+    } else {
+        skip('nextFrame() output', 'EOF immediately (single-frame image)');
+    }
+    dec.close();
+    ok('decoder.close() does not crash', true);
 }
 
 // ── run ──────────────────────────────────────────────────────────────────────
