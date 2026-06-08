@@ -237,18 +237,15 @@ async function testDecoderApi(jsPath) {
     }
 
     const pngBytes = makeTinyPng(4, 4);
-    const pngPtr   = mod._malloc(pngBytes.byteLength);
-    mod.HEAPU8.set(pngBytes, pngPtr);
-    const handle = mod.ccall('decoder_open', 'number',
-        ['number','number'], [pngPtr, pngBytes.byteLength]);
-    mod._free(pngPtr);
+    mod.FS.writeFile('/dec_test.png', new Uint8Array(pngBytes));
+    const handle = mod.ccall('decoder_open_file', 'number', ['string'], ['/dec_test.png']);
 
     if (handle < 0) {
-        skip('decoder_open PNG success path', `avformat probe failed (code ${handle})`);
+        skip('decoder_open_file PNG success path', `open failed (code ${handle})`);
         skip('decoder_width / decoder_height', 'depends on open');
         skip('decoder_fps_num / decoder_fps_den', 'depends on open');
     } else {
-        ok('decoder_open PNG returns >= 0', true);
+        ok('decoder_open_file PNG returns >= 0', true);
         const w = mod.ccall('decoder_width',   'number', ['number'], [handle]);
         const h = mod.ccall('decoder_height',  'number', ['number'], [handle]);
         ok('decoder_width  returns > 0', w > 0);
@@ -278,11 +275,10 @@ async function testDecoderApi(jsPath) {
     {
         const png1 = makeTinyPng(2, 2);
         const png2 = makeTinyPng(4, 4);
-        const ptr1 = mod._malloc(png1.byteLength); mod.HEAPU8.set(png1, ptr1);
-        const ptr2 = mod._malloc(png2.byteLength); mod.HEAPU8.set(png2, ptr2);
-        const h1 = mod.ccall('decoder_open', 'number', ['number','number'], [ptr1, png1.byteLength]);
-        const h2 = mod.ccall('decoder_open', 'number', ['number','number'], [ptr2, png2.byteLength]);
-        mod._free(ptr1); mod._free(ptr2);
+        mod.FS.writeFile('/dec_c1.png', new Uint8Array(png1));
+        mod.FS.writeFile('/dec_c2.png', new Uint8Array(png2));
+        const h1 = mod.ccall('decoder_open_file', 'number', ['string'], ['/dec_c1.png']);
+        const h2 = mod.ccall('decoder_open_file', 'number', ['string'], ['/dec_c2.png']);
         if (h1 >= 0 && h2 >= 0) {
             ok('concurrent sessions: handles distinct', h1 !== h2);
             ok('concurrent sessions: h1 width > 0', mod.ccall('decoder_width', 'number', ['number'], [h1]) > 0);
@@ -413,16 +409,17 @@ async function testGpu(cpuJsPath) {
     ok('createDecoder with garbage throws', threw);
 
     const pngBytes = makeTinyPng(4, 4);
+    gpu.FS.writeFile('/gpu_test.png', new Uint8Array(pngBytes));
     let dec;
-    try { dec = gpu.createDecoder(new Uint8Array(pngBytes)); }
+    try { dec = gpu.createDecoderFile('/gpu_test.png'); }
     catch (e) {
-        skip('createDecoder PNG', `open failed: ${e.message}`);
+        skip('createDecoderFile PNG', `open failed: ${e.message}`);
         return;
     }
-    ok('createDecoder returns object',           dec !== null && typeof dec === 'object');
-    ok('createDecoder .width > 0',               dec.width > 0);
-    ok('createDecoder .height > 0',              dec.height > 0);
-    ok('createDecoder .fps is a positive number', dec.fps > 0);
+    ok('createDecoderFile returns object',           dec !== null && typeof dec === 'object');
+    ok('createDecoderFile .width > 0',               dec.width > 0);
+    ok('createDecoderFile .height > 0',              dec.height > 0);
+    ok('createDecoderFile .fps is a positive number', dec.fps > 0);
     const frame = dec.nextFrame();
     if (frame !== null) {
         ok('nextFrame() returns Uint8ClampedArray',    frame instanceof Uint8ClampedArray);
