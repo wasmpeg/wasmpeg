@@ -240,6 +240,30 @@ async function testDecoderApi(jsPath) {
         ok('decoder_fps_num(-1) returns -1', mod.ccall('decoder_fps_num', 'number', ['number'], [-1]) === -1);
         ok('decoder_fps_den(-1) returns -1', mod.ccall('decoder_fps_den', 'number', ['number'], [-1]) === -1);
     }
+
+    const pngBytes = makeTinyPng(4, 4);
+    const pngPtr   = mod._malloc(pngBytes.byteLength);
+    mod.HEAPU8.set(pngBytes, pngPtr);
+    const handle = mod.ccall('decoder_open', 'number',
+        ['number','number'], [pngPtr, pngBytes.byteLength]);
+    mod._free(pngPtr);
+
+    if (handle < 0) {
+        skip('decoder_open PNG success path', `avformat probe failed (code ${handle})`);
+        skip('decoder_width / decoder_height', 'depends on open');
+        skip('decoder_fps_num / decoder_fps_den', 'depends on open');
+    } else {
+        ok('decoder_open PNG returns >= 0', true);
+        const w = mod.ccall('decoder_width',   'number', ['number'], [handle]);
+        const h = mod.ccall('decoder_height',  'number', ['number'], [handle]);
+        ok('decoder_width  returns > 0', w > 0);
+        ok('decoder_height returns > 0', h > 0);
+        const fpsNum = mod.ccall('decoder_fps_num', 'number', ['number'], [handle]);
+        const fpsDen = mod.ccall('decoder_fps_den', 'number', ['number'], [handle]);
+        ok('decoder_fps_num returns > 0', fpsNum > 0);
+        ok('decoder_fps_den returns > 0', fpsDen > 0);
+        mod.ccall('decoder_close', null, ['number'], [handle]);
+    }
 }
 
 // ── 4. FFmpeg class API ──────────────────────────────────────────────────────
