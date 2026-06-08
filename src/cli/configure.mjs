@@ -23,7 +23,7 @@ const PRESETS = {
     minimal: {
         decoders:  ['h264', 'vp8', 'aac', 'opus', 'mp3'],
         encoders:  ['aac', 'mjpeg', 'png'],
-        demuxers:  ['mov', 'matroska', 'ogg', 'mp3', 'image2', 'image2pipe', 'image_png_pipe'],
+        demuxers:  ['mov', 'matroska', 'ogg', 'mp3', 'h264', 'hevc', 'image2', 'image2pipe', 'image_png_pipe'],
         muxers:    ['mp4', 'webm', 'ogg', 'image2', 'null'],
         parsers:   ['h264', 'vp8', 'aac', 'opus', 'png'],
         protocols: ['file'],
@@ -35,6 +35,7 @@ const PRESETS = {
                     'mp3', 'vorbis', 'png', 'mjpeg', 'gif', 'flac'],
         encoders:  ['aac', 'opus', 'flac', 'mjpeg', 'png', 'gif'],
         demuxers:  ['mov', 'matroska', 'ogg', 'mp3', 'wav',
+                    'h264', 'hevc', 'vp8', 'vp9',
                     'image2', 'image2pipe', 'image_png_pipe', 'concat', 'flac'],
         muxers:    ['mp4', 'webm', 'ogg', 'image2', 'wav', 'null', 'flac'],
         parsers:   ['h264', 'hevc', 'vp8', 'vp9', 'aac', 'opus', 'png'],
