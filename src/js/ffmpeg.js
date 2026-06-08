@@ -9,6 +9,8 @@
  *   const out = await ff.readFile('output.webm');
  */
 
+import { exec } from './exec.mjs';
+
 export class FFmpeg {
     #mod    = null;
     #log    = [];
@@ -93,10 +95,12 @@ export class FFmpeg {
 
     async exec(args, { timeout = 0 } = {}) {
         this.#assertLoaded();
-        // callMain requires the FFmpeg program (fftools/*.c) to be compiled into
-        // the wasm binary. Currently only pipeline.c is linked; exec() is not
-        // yet functional. See build.sh for the TODO.
-        throw new Error('exec() not available: fftools/main not linked (TODO)');
+        // Resolve -i input from the WASM FS, dispatch through the wasmpeg pipeline.
+        const parsed = (await import('./exec.mjs')).parseArgs(args);
+        const inputPath = parsed.inputs[0]?.url;
+        if (!inputPath) throw new Error('exec(): no -i input specified');
+        const inputBytes = this.#mod.FS.readFile(inputPath);
+        return exec(inputBytes, args);
     }
 
     terminate() {
