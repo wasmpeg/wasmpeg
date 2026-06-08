@@ -1,5 +1,5 @@
 /*
- * Generic FFmpeg filter pipeline for WASM.
+ * Generic FFmpeg filter + decoder + audio + encode + probe pipeline for WASM.
  *
  * New GPU filters slot in via the filtergraph string — no changes to this
  * file needed. Compile with build-cpu.sh or build-webgpu.sh.
@@ -8,9 +8,12 @@
 #include <string.h>
 #include <emscripten.h>
 #include <libavutil/avutil.h>
+#include <libavutil/channel_layout.h>
 #include <libavutil/frame.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/log.h>
+#include <libavutil/mathematics.h>
+#include <libavutil/opt.h>
 #include <libavutil/pixfmt.h>
 #include <libavutil/hwcontext.h>
 #include <libavfilter/avfilter.h>
@@ -19,6 +22,7 @@
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
 
 /* ------------------------------------------------------------------ version */
 
@@ -230,7 +234,7 @@ done:
 }
 #endif /* CONFIG_WEBGPU */
 
-/* -------------------------------------------------- avformat decoder ---- */
+/* -------------------------------------------------- shared memory I/O ---- */
 
 typedef struct {
     uint8_t *data;
@@ -262,8 +266,25 @@ static int64_t mem_seek(void *opaque, int64_t offset, int whence)
     return p;
 }
 
-#define MAX_SESSIONS   8
-#define AVIO_BUF_SIZE  65536
+/* Allocate a MemBuf-backed AVIOContext. Caller must free avio_ctx->buffer and
+   avio_ctx itself on cleanup (or call avio_cleanup()). */
+static AVIOContext *membuf_avio_alloc(MemBuf *m)
+{
+    uint8_t *buf = av_malloc(65536);
+    if (!buf) return NULL;
+    AVIOContext *ctx = avio_alloc_context(buf, 65536, 0, m, mem_read, NULL, mem_seek);
+    if (!ctx) { av_free(buf); return NULL; }
+    return ctx;
+}
+
+static void avio_cleanup(AVIOContext **ctx)
+{
+    if (*ctx) { av_freep(&(*ctx)->buffer); avio_context_free(ctx); }
+}
+
+#define MAX_SESSIONS 8
+
+/* -------------------------------------------------- video decoder -------- */
 
 typedef struct {
     int               active;
@@ -282,48 +303,13 @@ typedef struct {
     int               sws_dst_w, sws_dst_h;
 } DecodeSession;
 
-static DecodeSession g_sessions[MAX_SESSIONS];
+static DecodeSession g_dec[MAX_SESSIONS];
 
-static int decoder_open_internal(const uint8_t *data, int size, const char *fmt_name)
+/* Shared post-open setup: find video stream, open codec, alloc pkt+frame. */
+static int decoder_setup_video(DecodeSession *s)
 {
-    int slot = -1;
-    for (int i = 0; i < MAX_SESSIONS; i++)
-        if (!g_sessions[i].active) { slot = i; break; }
-    if (slot < 0) return AVERROR(ENOMEM);
-
-    DecodeSession *s = &g_sessions[slot];
-    memset(s, 0, sizeof(*s));
-
-    s->membuf.data = av_malloc(size);
-    if (!s->membuf.data) return AVERROR(ENOMEM);
-    memcpy(s->membuf.data, data, size);
-    s->membuf.size = size;
-
-    uint8_t *avio_buf = av_malloc(AVIO_BUF_SIZE);
-    if (!avio_buf) { av_free(s->membuf.data); return AVERROR(ENOMEM); }
-
-    // Always use seekable AVIO: pipe demuxers need avio_size() to size reads,
-    // and forcing a format via av_find_input_format bypasses the probe that
-    // previously rejected seekable streams.
-    s->avio_ctx = avio_alloc_context(avio_buf, AVIO_BUF_SIZE, 0,
-                                     &s->membuf, mem_read, NULL, mem_seek);
-    if (!s->avio_ctx) { av_free(avio_buf); av_free(s->membuf.data); return AVERROR(ENOMEM); }
-
-    s->fmt_ctx = avformat_alloc_context();
-    if (!s->fmt_ctx) {
-        av_freep(&s->avio_ctx->buffer);
-        avio_context_free(&s->avio_ctx);
-        av_free(s->membuf.data);
-        return AVERROR(ENOMEM);
-    }
-    s->fmt_ctx->pb = s->avio_ctx;
-
-    const AVInputFormat *forced_fmt = fmt_name ? av_find_input_format(fmt_name) : NULL;
-    int ret = avformat_open_input(&s->fmt_ctx, NULL, forced_fmt, NULL);
-    if (ret < 0) goto fail;
-
-    ret = avformat_find_stream_info(s->fmt_ctx, NULL);
-    if (ret < 0) goto fail;
+    int ret = avformat_find_stream_info(s->fmt_ctx, NULL);
+    if (ret < 0) return ret;
 
     s->video_stream = -1;
     for (unsigned i = 0; i < s->fmt_ctx->nb_streams; i++) {
@@ -332,20 +318,20 @@ static int decoder_open_internal(const uint8_t *data, int size, const char *fmt_
             break;
         }
     }
-    if (s->video_stream < 0) { ret = AVERROR_STREAM_NOT_FOUND; goto fail; }
+    if (s->video_stream < 0) return AVERROR_STREAM_NOT_FOUND;
 
     AVStream *st = s->fmt_ctx->streams[s->video_stream];
     const AVCodec *codec = avcodec_find_decoder(st->codecpar->codec_id);
-    if (!codec) { ret = AVERROR_DECODER_NOT_FOUND; goto fail; }
+    if (!codec) return AVERROR_DECODER_NOT_FOUND;
 
     s->codec_ctx = avcodec_alloc_context3(codec);
-    if (!s->codec_ctx) { ret = AVERROR(ENOMEM); goto fail; }
+    if (!s->codec_ctx) return AVERROR(ENOMEM);
 
     ret = avcodec_parameters_to_context(s->codec_ctx, st->codecpar);
-    if (ret < 0) goto fail;
+    if (ret < 0) return ret;
 
     ret = avcodec_open2(s->codec_ctx, codec, NULL);
-    if (ret < 0) goto fail;
+    if (ret < 0) return ret;
 
     s->width  = s->codec_ctx->width;
     s->height = s->codec_ctx->height;
@@ -358,20 +344,53 @@ static int decoder_open_internal(const uint8_t *data, int size, const char *fmt_
 
     s->pkt   = av_packet_alloc();
     s->frame = av_frame_alloc();
-    if (!s->pkt || !s->frame) { ret = AVERROR(ENOMEM); goto fail; }
+    if (!s->pkt || !s->frame) return AVERROR(ENOMEM);
 
     s->active = 1;
-    return slot;
+    return 0;
+}
 
-fail:
-    avformat_close_input(&s->fmt_ctx);
-    if (s->avio_ctx) { av_freep(&s->avio_ctx->buffer); avio_context_free(&s->avio_ctx); }
-    av_free(s->membuf.data);
+static void decoder_cleanup(DecodeSession *s)
+{
+    sws_freeContext(s->sws);
     av_packet_free(&s->pkt);
     av_frame_free(&s->frame);
     avcodec_free_context(&s->codec_ctx);
+    avformat_close_input(&s->fmt_ctx);
+    avio_cleanup(&s->avio_ctx);
+    av_free(s->membuf.data);
     memset(s, 0, sizeof(*s));
-    return ret;
+}
+
+static int decoder_open_internal(const uint8_t *data, int size, const char *fmt_name)
+{
+    int slot = -1;
+    for (int i = 0; i < MAX_SESSIONS; i++)
+        if (!g_dec[i].active) { slot = i; break; }
+    if (slot < 0) return AVERROR(ENOMEM);
+
+    DecodeSession *s = &g_dec[slot];
+    memset(s, 0, sizeof(*s));
+
+    s->membuf.data = av_malloc(size);
+    if (!s->membuf.data) return AVERROR(ENOMEM);
+    memcpy(s->membuf.data, data, size);
+    s->membuf.size = size;
+
+    s->avio_ctx = membuf_avio_alloc(&s->membuf);
+    if (!s->avio_ctx) { av_free(s->membuf.data); return AVERROR(ENOMEM); }
+
+    s->fmt_ctx = avformat_alloc_context();
+    if (!s->fmt_ctx) { decoder_cleanup(s); return AVERROR(ENOMEM); }
+    s->fmt_ctx->pb = s->avio_ctx;
+
+    const AVInputFormat *forced = fmt_name ? av_find_input_format(fmt_name) : NULL;
+    int ret = avformat_open_input(&s->fmt_ctx, NULL, forced, NULL);
+    if (ret < 0) { decoder_cleanup(s); return ret; }
+
+    ret = decoder_setup_video(s);
+    if (ret < 0) { decoder_cleanup(s); return ret; }
+    return slot;
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -393,79 +412,34 @@ int decoder_open_file(const char *path)
 {
     int slot = -1;
     for (int i = 0; i < MAX_SESSIONS; i++)
-        if (!g_sessions[i].active) { slot = i; break; }
+        if (!g_dec[i].active) { slot = i; break; }
     if (slot < 0) return AVERROR(ENOMEM);
 
-    DecodeSession *s = &g_sessions[slot];
+    DecodeSession *s = &g_dec[slot];
     memset(s, 0, sizeof(*s));
 
     // Force image2 (file-based, non-pipe) so FFmpeg reads PNG as a still image
     // rather than selecting png_pipe which fails to resolve stream parameters.
     const AVInputFormat *img2 = av_find_input_format("image2");
     int ret = avformat_open_input(&s->fmt_ctx, path, img2, NULL);
-    if (ret < 0) goto fail_noavio;
+    if (ret < 0) { decoder_cleanup(s); return ret; }
 
-    ret = avformat_find_stream_info(s->fmt_ctx, NULL);
-    if (ret < 0) goto fail_noavio;
-
-    s->video_stream = -1;
-    for (unsigned i = 0; i < s->fmt_ctx->nb_streams; i++) {
-        if (s->fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-            s->video_stream = (int)i;
-            break;
-        }
-    }
-    if (s->video_stream < 0) { ret = AVERROR_STREAM_NOT_FOUND; goto fail_noavio; }
-
-    AVStream *st2 = s->fmt_ctx->streams[s->video_stream];
-    const AVCodec *codec2 = avcodec_find_decoder(st2->codecpar->codec_id);
-    if (!codec2) { ret = AVERROR_DECODER_NOT_FOUND; goto fail_noavio; }
-
-    s->codec_ctx = avcodec_alloc_context3(codec2);
-    if (!s->codec_ctx) { ret = AVERROR(ENOMEM); goto fail_noavio; }
-
-    ret = avcodec_parameters_to_context(s->codec_ctx, st2->codecpar);
-    if (ret < 0) goto fail_noavio;
-
-    ret = avcodec_open2(s->codec_ctx, codec2, NULL);
-    if (ret < 0) goto fail_noavio;
-
-    s->width  = s->codec_ctx->width;
-    s->height = s->codec_ctx->height;
-    if (st2->avg_frame_rate.den && st2->avg_frame_rate.num) {
-        s->fps_num = st2->avg_frame_rate.num;
-        s->fps_den = st2->avg_frame_rate.den;
-    } else {
-        s->fps_num = 25; s->fps_den = 1;
-    }
-
-    s->pkt   = av_packet_alloc();
-    s->frame = av_frame_alloc();
-    if (!s->pkt || !s->frame) { ret = AVERROR(ENOMEM); goto fail_noavio; }
-
-    s->active = 1;
+    ret = decoder_setup_video(s);
+    if (ret < 0) { decoder_cleanup(s); return ret; }
     return slot;
-
-fail_noavio:
-    avformat_close_input(&s->fmt_ctx);
-    av_packet_free(&s->pkt);
-    av_frame_free(&s->frame);
-    avcodec_free_context(&s->codec_ctx);
-    memset(s, 0, sizeof(*s));
-    return ret;
 }
 
-EMSCRIPTEN_KEEPALIVE int decoder_width(int h)   { return (h>=0&&h<MAX_SESSIONS&&g_sessions[h].active)?g_sessions[h].width  :-1; }
-EMSCRIPTEN_KEEPALIVE int decoder_height(int h)  { return (h>=0&&h<MAX_SESSIONS&&g_sessions[h].active)?g_sessions[h].height :-1; }
-EMSCRIPTEN_KEEPALIVE int decoder_fps_num(int h) { return (h>=0&&h<MAX_SESSIONS&&g_sessions[h].active)?g_sessions[h].fps_num:-1; }
-EMSCRIPTEN_KEEPALIVE int decoder_fps_den(int h) { return (h>=0&&h<MAX_SESSIONS&&g_sessions[h].active)?g_sessions[h].fps_den:-1; }
+EMSCRIPTEN_KEEPALIVE int decoder_width(int h)   { return (h>=0&&h<MAX_SESSIONS&&g_dec[h].active)?g_dec[h].width  :-1; }
+EMSCRIPTEN_KEEPALIVE int decoder_height(int h)  { return (h>=0&&h<MAX_SESSIONS&&g_dec[h].active)?g_dec[h].height :-1; }
+EMSCRIPTEN_KEEPALIVE int decoder_fps_num(int h) { return (h>=0&&h<MAX_SESSIONS&&g_dec[h].active)?g_dec[h].fps_num:-1; }
+EMSCRIPTEN_KEEPALIVE int decoder_fps_den(int h) { return (h>=0&&h<MAX_SESSIONS&&g_dec[h].active)?g_dec[h].fps_den:-1; }
 
 EMSCRIPTEN_KEEPALIVE
 int decoder_next_frame(int handle, uint8_t *dst_rgba, int dst_w, int dst_h)
 {
-    if (handle < 0 || handle >= MAX_SESSIONS || !g_sessions[handle].active)
+    if (handle < 0 || handle >= MAX_SESSIONS || !g_dec[handle].active)
         return AVERROR(EINVAL);
-    DecodeSession *s = &g_sessions[handle];
+    DecodeSession *s = &g_dec[handle];
 
     for (;;) {
         int ret = avcodec_receive_frame(s->codec_ctx, s->frame);
@@ -523,16 +497,521 @@ int decoder_next_frame(int handle, uint8_t *dst_rgba, int dst_w, int dst_h)
 EMSCRIPTEN_KEEPALIVE
 void decoder_close(int handle)
 {
-    if (handle < 0 || handle >= MAX_SESSIONS || !g_sessions[handle].active) return;
-    DecodeSession *s = &g_sessions[handle];
-    sws_freeContext(s->sws);
+    if (handle >= 0 && handle < MAX_SESSIONS && g_dec[handle].active)
+        decoder_cleanup(&g_dec[handle]);
+}
+
+/* -------------------------------------------------- audio decoder -------- */
+
+typedef struct {
+    int               active;
+    MemBuf            membuf;
+    AVIOContext      *avio_ctx;
+    AVFormatContext  *fmt_ctx;
+    AVCodecContext   *codec_ctx;
+    AVPacket         *pkt;
+    AVFrame          *frame;
+    struct SwrContext *swr;
+    int               audio_stream;
+    int               channels;
+    int               sample_rate;
+} AudioSession;
+
+static AudioSession g_aud[MAX_SESSIONS];
+
+static void audio_cleanup(AudioSession *s)
+{
+    swr_free(&s->swr);
     av_packet_free(&s->pkt);
     av_frame_free(&s->frame);
     avcodec_free_context(&s->codec_ctx);
     avformat_close_input(&s->fmt_ctx);
-    if (s->avio_ctx) { av_freep(&s->avio_ctx->buffer); avio_context_free(&s->avio_ctx); }
+    avio_cleanup(&s->avio_ctx);
     av_free(s->membuf.data);
     memset(s, 0, sizeof(*s));
+}
+
+static int audio_open_internal(const uint8_t *data, int size, const char *fmt_name)
+{
+    int slot = -1;
+    for (int i = 0; i < MAX_SESSIONS; i++)
+        if (!g_aud[i].active) { slot = i; break; }
+    if (slot < 0) return AVERROR(ENOMEM);
+
+    AudioSession *s = &g_aud[slot];
+    memset(s, 0, sizeof(*s));
+
+    s->membuf.data = av_malloc(size);
+    if (!s->membuf.data) return AVERROR(ENOMEM);
+    memcpy(s->membuf.data, data, size);
+    s->membuf.size = size;
+
+    s->avio_ctx = membuf_avio_alloc(&s->membuf);
+    if (!s->avio_ctx) { av_free(s->membuf.data); return AVERROR(ENOMEM); }
+
+    s->fmt_ctx = avformat_alloc_context();
+    if (!s->fmt_ctx) { audio_cleanup(s); return AVERROR(ENOMEM); }
+    s->fmt_ctx->pb = s->avio_ctx;
+
+    const AVInputFormat *forced = fmt_name ? av_find_input_format(fmt_name) : NULL;
+    int ret = avformat_open_input(&s->fmt_ctx, NULL, forced, NULL);
+    if (ret < 0) { audio_cleanup(s); return ret; }
+
+    ret = avformat_find_stream_info(s->fmt_ctx, NULL);
+    if (ret < 0) { audio_cleanup(s); return ret; }
+
+    s->audio_stream = -1;
+    for (unsigned i = 0; i < s->fmt_ctx->nb_streams; i++) {
+        if (s->fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            s->audio_stream = (int)i;
+            break;
+        }
+    }
+    if (s->audio_stream < 0) { audio_cleanup(s); return AVERROR_STREAM_NOT_FOUND; }
+
+    AVStream *st = s->fmt_ctx->streams[s->audio_stream];
+    const AVCodec *codec = avcodec_find_decoder(st->codecpar->codec_id);
+    if (!codec) { audio_cleanup(s); return AVERROR_DECODER_NOT_FOUND; }
+
+    s->codec_ctx = avcodec_alloc_context3(codec);
+    if (!s->codec_ctx) { audio_cleanup(s); return AVERROR(ENOMEM); }
+
+    ret = avcodec_parameters_to_context(s->codec_ctx, st->codecpar);
+    if (ret < 0) { audio_cleanup(s); return ret; }
+
+    ret = avcodec_open2(s->codec_ctx, codec, NULL);
+    if (ret < 0) { audio_cleanup(s); return ret; }
+
+    s->channels    = s->codec_ctx->ch_layout.nb_channels;
+    s->sample_rate = s->codec_ctx->sample_rate;
+
+    /* Set up SWR: convert any audio format → f32 interleaved, same rate/channels */
+    AVChannelLayout out_layout = AV_CHANNEL_LAYOUT_STEREO;
+    if (s->channels == 1)
+        out_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_MONO;
+
+    ret = swr_alloc_set_opts2(&s->swr,
+        &out_layout,           AV_SAMPLE_FMT_FLT, s->sample_rate,
+        &s->codec_ctx->ch_layout, s->codec_ctx->sample_fmt, s->sample_rate,
+        0, NULL);
+    if (ret < 0) { audio_cleanup(s); return ret; }
+    ret = swr_init(s->swr);
+    if (ret < 0) { audio_cleanup(s); return ret; }
+
+    s->pkt   = av_packet_alloc();
+    s->frame = av_frame_alloc();
+    if (!s->pkt || !s->frame) { audio_cleanup(s); return AVERROR(ENOMEM); }
+
+    s->active = 1;
+    return slot;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int audio_open(const uint8_t *data, int size)
+{
+    return audio_open_internal(data, size, NULL);
+}
+
+EMSCRIPTEN_KEEPALIVE
+int audio_open_format(const uint8_t *data, int size, const char *fmt_name)
+{
+    return audio_open_internal(data, size, fmt_name);
+}
+
+EMSCRIPTEN_KEEPALIVE int audio_channels(int h)    { return (h>=0&&h<MAX_SESSIONS&&g_aud[h].active)?g_aud[h].channels   :-1; }
+EMSCRIPTEN_KEEPALIVE int audio_sample_rate(int h) { return (h>=0&&h<MAX_SESSIONS&&g_aud[h].active)?g_aud[h].sample_rate:-1; }
+
+/*
+ * Decode the next audio frame into dst_f32 (interleaved f32le).
+ * Returns the number of float values written (samples * channels),
+ * 1 at EOF, or a negative AVERROR code on failure.
+ * max_floats is the capacity of dst_f32 in floats.
+ */
+EMSCRIPTEN_KEEPALIVE
+int audio_next_samples(int handle, float *dst_f32, int max_floats)
+{
+    if (handle < 0 || handle >= MAX_SESSIONS || !g_aud[handle].active)
+        return AVERROR(EINVAL);
+    AudioSession *s = &g_aud[handle];
+
+    for (;;) {
+        int ret = avcodec_receive_frame(s->codec_ctx, s->frame);
+        if (ret == 0) {
+            int max_samples = max_floats / s->channels;
+            uint8_t *out_planes[1] = { (uint8_t *)dst_f32 };
+            int converted = swr_convert(s->swr,
+                out_planes, max_samples,
+                (const uint8_t **)s->frame->data, s->frame->nb_samples);
+            av_frame_unref(s->frame);
+            if (converted < 0) return converted;
+            return converted * s->channels;
+        }
+        if (ret != AVERROR(EAGAIN)) return ret == AVERROR_EOF ? 1 : ret;
+
+        for (;;) {
+            ret = av_read_frame(s->fmt_ctx, s->pkt);
+            if (ret < 0) {
+                avcodec_send_packet(s->codec_ctx, NULL);
+                break;
+            }
+            if (s->pkt->stream_index == s->audio_stream) {
+                ret = avcodec_send_packet(s->codec_ctx, s->pkt);
+                av_packet_unref(s->pkt);
+                if (ret < 0) return ret;
+                break;
+            }
+            av_packet_unref(s->pkt);
+        }
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE
+void audio_close(int handle)
+{
+    if (handle >= 0 && handle < MAX_SESSIONS && g_aud[handle].active)
+        audio_cleanup(&g_aud[handle]);
+}
+
+/* -------------------------------------------------- probe ---------------- */
+
+typedef struct {
+    int              active;
+    MemBuf           membuf;
+    AVIOContext     *avio_ctx;
+    AVFormatContext *fmt_ctx;
+} ProbeSession;
+
+static ProbeSession g_probe[MAX_SESSIONS];
+
+static void probe_cleanup(ProbeSession *s)
+{
+    avformat_close_input(&s->fmt_ctx);
+    avio_cleanup(&s->avio_ctx);
+    av_free(s->membuf.data);
+    memset(s, 0, sizeof(*s));
+}
+
+EMSCRIPTEN_KEEPALIVE
+int probe_open(const uint8_t *data, int size)
+{
+    int slot = -1;
+    for (int i = 0; i < MAX_SESSIONS; i++)
+        if (!g_probe[i].active) { slot = i; break; }
+    if (slot < 0) return AVERROR(ENOMEM);
+
+    ProbeSession *s = &g_probe[slot];
+    memset(s, 0, sizeof(*s));
+
+    s->membuf.data = av_malloc(size);
+    if (!s->membuf.data) return AVERROR(ENOMEM);
+    memcpy(s->membuf.data, data, size);
+    s->membuf.size = size;
+
+    s->avio_ctx = membuf_avio_alloc(&s->membuf);
+    if (!s->avio_ctx) { av_free(s->membuf.data); return AVERROR(ENOMEM); }
+
+    s->fmt_ctx = avformat_alloc_context();
+    if (!s->fmt_ctx) { probe_cleanup(s); return AVERROR(ENOMEM); }
+    s->fmt_ctx->pb = s->avio_ctx;
+
+    int ret = avformat_open_input(&s->fmt_ctx, NULL, NULL, NULL);
+    if (ret < 0) { probe_cleanup(s); return ret; }
+
+    ret = avformat_find_stream_info(s->fmt_ctx, NULL);
+    if (ret < 0) { probe_cleanup(s); return ret; }
+
+    s->active = 1;
+    return slot;
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char *probe_format_name(int handle)
+{
+    if (handle < 0 || handle >= MAX_SESSIONS || !g_probe[handle].active) return NULL;
+    return g_probe[handle].fmt_ctx->iformat->name;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int probe_duration_ms(int handle)
+{
+    if (handle < 0 || handle >= MAX_SESSIONS || !g_probe[handle].active) return -1;
+    int64_t d = g_probe[handle].fmt_ctx->duration;
+    return (d == AV_NOPTS_VALUE) ? -1 : (int)(d / 1000);
+}
+
+EMSCRIPTEN_KEEPALIVE
+int probe_stream_count(int handle)
+{
+    if (handle < 0 || handle >= MAX_SESSIONS || !g_probe[handle].active) return -1;
+    return (int)g_probe[handle].fmt_ctx->nb_streams;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int probe_stream_type(int handle, int idx)
+{
+    if (handle < 0 || handle >= MAX_SESSIONS || !g_probe[handle].active) return -1;
+    AVFormatContext *fc = g_probe[handle].fmt_ctx;
+    if (idx < 0 || (unsigned)idx >= fc->nb_streams) return -1;
+    return (int)fc->streams[idx]->codecpar->codec_type;
+}
+
+static AVStream *probe_find_stream(int handle, enum AVMediaType type)
+{
+    if (handle < 0 || handle >= MAX_SESSIONS || !g_probe[handle].active) return NULL;
+    AVFormatContext *fc = g_probe[handle].fmt_ctx;
+    for (unsigned i = 0; i < fc->nb_streams; i++)
+        if (fc->streams[i]->codecpar->codec_type == type)
+            return fc->streams[i];
+    return NULL;
+}
+
+EMSCRIPTEN_KEEPALIVE int probe_width(int h)       { AVStream *s=probe_find_stream(h,AVMEDIA_TYPE_VIDEO); return s?s->codecpar->width :-1; }
+EMSCRIPTEN_KEEPALIVE int probe_height(int h)      { AVStream *s=probe_find_stream(h,AVMEDIA_TYPE_VIDEO); return s?s->codecpar->height:-1; }
+EMSCRIPTEN_KEEPALIVE int probe_fps_num(int h)     { AVStream *s=probe_find_stream(h,AVMEDIA_TYPE_VIDEO); return s&&s->avg_frame_rate.den?s->avg_frame_rate.num:-1; }
+EMSCRIPTEN_KEEPALIVE int probe_fps_den(int h)     { AVStream *s=probe_find_stream(h,AVMEDIA_TYPE_VIDEO); return s&&s->avg_frame_rate.den?s->avg_frame_rate.den:-1; }
+EMSCRIPTEN_KEEPALIVE int probe_sample_rate(int h) { AVStream *s=probe_find_stream(h,AVMEDIA_TYPE_AUDIO); return s?s->codecpar->sample_rate:-1; }
+EMSCRIPTEN_KEEPALIVE int probe_channels(int h)    { AVStream *s=probe_find_stream(h,AVMEDIA_TYPE_AUDIO); return s?s->codecpar->ch_layout.nb_channels:-1; }
+EMSCRIPTEN_KEEPALIVE int probe_bitrate(int h)     { return (h>=0&&h<MAX_SESSIONS&&g_probe[h].active)?(int)(g_probe[h].fmt_ctx->bit_rate/1000):-1; }
+
+EMSCRIPTEN_KEEPALIVE
+void probe_close(int handle)
+{
+    if (handle >= 0 && handle < MAX_SESSIONS && g_probe[handle].active)
+        probe_cleanup(&g_probe[handle]);
+}
+
+/* -------------------------------------------------- encoder -------------- */
+
+/* Growable + seekable write buffer for muxer output. */
+typedef struct {
+    uint8_t *data;
+    size_t   size;
+    size_t   cap;
+    int64_t  pos;
+} WriteBuf;
+
+static int writebuf_write(void *opaque, const uint8_t *buf, int size)
+{
+    WriteBuf *w = opaque;
+    size_t end = (size_t)w->pos + size;
+    if (end > w->cap) {
+        size_t newcap = w->cap ? w->cap * 2 : 131072;
+        while (newcap < end) newcap *= 2;
+        uint8_t *p = av_realloc(w->data, newcap);
+        if (!p) return AVERROR(ENOMEM);
+        w->data = p;
+        w->cap  = newcap;
+    }
+    memcpy(w->data + w->pos, buf, size);
+    w->pos += size;
+    if ((size_t)w->pos > w->size) w->size = (size_t)w->pos;
+    return size;
+}
+
+static int64_t writebuf_seek(void *opaque, int64_t offset, int whence)
+{
+    WriteBuf *w = opaque;
+    int64_t p;
+    if      (whence == SEEK_SET) p = offset;
+    else if (whence == SEEK_CUR) p = w->pos + offset;
+    else if (whence == SEEK_END) p = (int64_t)w->size + offset;
+    else if (whence == AVSEEK_SIZE) return (int64_t)w->size;
+    else return -1;
+    if (p < 0) return -1;
+    w->pos = p;
+    return p;
+}
+
+#define MAX_ENCODER_SESSIONS 4
+
+typedef struct {
+    int               active;
+    WriteBuf          wbuf;
+    AVIOContext      *avio_ctx;
+    AVFormatContext  *fmt_ctx;
+    AVCodecContext   *codec_ctx;
+    AVStream         *stream;
+    AVPacket         *pkt;
+    AVFrame          *frame;        /* encoder pixel format frame */
+    struct SwsContext *sws;         /* RGBA → encoder pix_fmt */
+    int               width, height;
+    int64_t           pts;
+} EncoderSession;
+
+static EncoderSession g_enc[MAX_ENCODER_SESSIONS];
+
+static void encoder_cleanup(EncoderSession *s)
+{
+    sws_freeContext(s->sws);
+    av_packet_free(&s->pkt);
+    av_frame_free(&s->frame);
+    avcodec_free_context(&s->codec_ctx);
+    if (s->fmt_ctx) avformat_free_context(s->fmt_ctx);
+    avio_cleanup(&s->avio_ctx);
+    av_free(s->wbuf.data);
+    memset(s, 0, sizeof(*s));
+}
+
+/*
+ * Open an encoder session.
+ *
+ * fmt_name   — container format (e.g., "mp4", "webm", "image2")
+ * codec_name — encoder name (e.g., "mjpeg", "png", "aac")
+ * width, height — frame dimensions (0 for audio-only)
+ * fps_num, fps_den — frame rate (e.g., 30, 1)
+ * bitrate    — target bitrate in bits/s (0 for lossless/default)
+ *
+ * Returns session handle (>= 0) or negative AVERROR.
+ */
+EMSCRIPTEN_KEEPALIVE
+int encoder_open(const char *fmt_name, const char *codec_name,
+                 int width, int height, int fps_num, int fps_den, int bitrate)
+{
+    int slot = -1;
+    for (int i = 0; i < MAX_ENCODER_SESSIONS; i++)
+        if (!g_enc[i].active) { slot = i; break; }
+    if (slot < 0) return AVERROR(ENOMEM);
+
+    EncoderSession *s = &g_enc[slot];
+    memset(s, 0, sizeof(*s));
+
+    /* AVIO for output */
+    uint8_t *iobuf = av_malloc(65536);
+    if (!iobuf) return AVERROR(ENOMEM);
+    s->avio_ctx = avio_alloc_context(iobuf, 65536, 1,
+                                     &s->wbuf, NULL, writebuf_write, writebuf_seek);
+    if (!s->avio_ctx) { av_free(iobuf); return AVERROR(ENOMEM); }
+
+    int ret = avformat_alloc_output_context2(&s->fmt_ctx, NULL, fmt_name, NULL);
+    if (ret < 0) { encoder_cleanup(s); return ret; }
+    s->fmt_ctx->pb    = s->avio_ctx;
+    s->fmt_ctx->flags |= AVFMT_FLAG_CUSTOM_IO;
+
+    const AVCodec *codec = avcodec_find_encoder_by_name(codec_name);
+    if (!codec) { encoder_cleanup(s); return AVERROR_ENCODER_NOT_FOUND; }
+
+    s->stream = avformat_new_stream(s->fmt_ctx, NULL);
+    if (!s->stream) { encoder_cleanup(s); return AVERROR(ENOMEM); }
+
+    s->codec_ctx = avcodec_alloc_context3(codec);
+    if (!s->codec_ctx) { encoder_cleanup(s); return AVERROR(ENOMEM); }
+
+    /* Use the first supported pixel format */
+    enum AVPixelFormat pix_fmt = codec->pix_fmts ? codec->pix_fmts[0] : AV_PIX_FMT_YUV420P;
+
+    s->codec_ctx->width     = width;
+    s->codec_ctx->height    = height;
+    s->codec_ctx->pix_fmt   = pix_fmt;
+    s->codec_ctx->time_base = (AVRational){ fps_den, fps_num };
+    s->codec_ctx->framerate = (AVRational){ fps_num, fps_den };
+    if (bitrate > 0) s->codec_ctx->bit_rate = bitrate;
+
+    if (s->fmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
+        s->codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+    ret = avcodec_open2(s->codec_ctx, codec, NULL);
+    if (ret < 0) { encoder_cleanup(s); return ret; }
+
+    ret = avcodec_parameters_from_context(s->stream->codecpar, s->codec_ctx);
+    if (ret < 0) { encoder_cleanup(s); return ret; }
+    s->stream->time_base = s->codec_ctx->time_base;
+
+    /* SWS: RGBA → encoder pixel format */
+    s->sws = sws_getContext(width, height, AV_PIX_FMT_RGBA,
+                            width, height, pix_fmt,
+                            SWS_BILINEAR, NULL, NULL, NULL);
+    if (!s->sws) { encoder_cleanup(s); return AVERROR(ENOMEM); }
+
+    /* Pre-alloc encoder frame */
+    s->frame = av_frame_alloc();
+    if (!s->frame) { encoder_cleanup(s); return AVERROR(ENOMEM); }
+    s->frame->format = pix_fmt;
+    s->frame->width  = width;
+    s->frame->height = height;
+    ret = av_frame_get_buffer(s->frame, 0);
+    if (ret < 0) { encoder_cleanup(s); return ret; }
+
+    s->pkt = av_packet_alloc();
+    if (!s->pkt) { encoder_cleanup(s); return AVERROR(ENOMEM); }
+
+    ret = avformat_write_header(s->fmt_ctx, NULL);
+    if (ret < 0) { encoder_cleanup(s); return ret; }
+
+    s->width  = width;
+    s->height = height;
+    s->active = 1;
+    return slot;
+}
+
+/*
+ * Push one RGBA frame into the encoder.
+ * pts_ms is the presentation timestamp in milliseconds.
+ * Returns 0 on success, negative AVERROR on failure.
+ */
+EMSCRIPTEN_KEEPALIVE
+int encoder_push_rgba(int handle, const uint8_t *rgba, int w, int h, int64_t pts_ms)
+{
+    if (handle < 0 || handle >= MAX_ENCODER_SESSIONS || !g_enc[handle].active)
+        return AVERROR(EINVAL);
+    EncoderSession *s = &g_enc[handle];
+
+    const uint8_t *src_slices[1] = { rgba };
+    int src_stride[1] = { w * 4 };
+    sws_scale(s->sws, src_slices, src_stride, 0, h,
+              s->frame->data, s->frame->linesize);
+
+    s->frame->pts = av_rescale_q(pts_ms, (AVRational){1, 1000}, s->codec_ctx->time_base);
+
+    int ret = avcodec_send_frame(s->codec_ctx, s->frame);
+    if (ret < 0) return ret;
+
+    while (ret >= 0) {
+        ret = avcodec_receive_packet(s->codec_ctx, s->pkt);
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
+        if (ret < 0) return ret;
+        av_packet_rescale_ts(s->pkt, s->codec_ctx->time_base, s->stream->time_base);
+        s->pkt->stream_index = s->stream->index;
+        ret = av_write_frame(s->fmt_ctx, s->pkt);
+        av_packet_unref(s->pkt);
+        if (ret < 0) return ret;
+    }
+    return 0;
+}
+
+/*
+ * Flush the encoder and write the container trailer.
+ * After this call, use encoder_output_ptr/size to read the output bytes.
+ * Returns 0 on success, negative AVERROR on failure.
+ */
+EMSCRIPTEN_KEEPALIVE
+int encoder_finish(int handle)
+{
+    if (handle < 0 || handle >= MAX_ENCODER_SESSIONS || !g_enc[handle].active)
+        return AVERROR(EINVAL);
+    EncoderSession *s = &g_enc[handle];
+
+    int ret = avcodec_send_frame(s->codec_ctx, NULL);
+    while (ret >= 0) {
+        ret = avcodec_receive_packet(s->codec_ctx, s->pkt);
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
+        if (ret < 0) return ret;
+        av_packet_rescale_ts(s->pkt, s->codec_ctx->time_base, s->stream->time_base);
+        s->pkt->stream_index = s->stream->index;
+        ret = av_write_frame(s->fmt_ctx, s->pkt);
+        av_packet_unref(s->pkt);
+        if (ret < 0) return ret;
+    }
+    return av_write_trailer(s->fmt_ctx);
+}
+
+EMSCRIPTEN_KEEPALIVE uint8_t *encoder_output_ptr(int h)  { return (h>=0&&h<MAX_ENCODER_SESSIONS&&g_enc[h].active)?g_enc[h].wbuf.data:NULL; }
+EMSCRIPTEN_KEEPALIVE int      encoder_output_size(int h) { return (h>=0&&h<MAX_ENCODER_SESSIONS&&g_enc[h].active)?(int)g_enc[h].wbuf.size:-1; }
+
+EMSCRIPTEN_KEEPALIVE
+void encoder_close(int handle)
+{
+    if (handle >= 0 && handle < MAX_ENCODER_SESSIONS && g_enc[handle].active)
+        encoder_cleanup(&g_enc[handle]);
 }
 
 /* ------------------------------------------------------------ benchmarks */
