@@ -23,6 +23,9 @@ vendor/ffmpeg/config_components.h
 # emscripten cache
 .emscripten_cache/
 
+# local-only dev tools (browser testing deferred; see docs)
+tests/browser-test.html
+
 # OS
 .DS_Store
 Thumbs.db
