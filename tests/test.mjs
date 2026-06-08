@@ -341,6 +341,15 @@ async function testFFmpegClass(cpuJsPath) {
     ok('writeFile / readFile roundtrip', back.length === 5 && back[4] === 5);
 
     await ff.deleteFile('probe.bin');
+
+    await ff.createDir('/testdir');
+    await ff.writeFile('/testdir/a.bin', new Uint8Array([0]));
+    const entries = await ff.listDir('/testdir');
+    ok('createDir creates a directory',  Array.isArray(entries));
+    ok('listDir sees written file',      entries.includes('a.bin'));
+    ok('listDir includes . and ..',      entries.includes('.') && entries.includes('..'));
+    await ff.deleteFile('/testdir/a.bin');
+
     let threw = false;
     try { await ff.readFile('probe.bin'); } catch { threw = true; }
     ok('deleteFile removes file', threw);
