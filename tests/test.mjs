@@ -215,7 +215,27 @@ async function testPipelineEdgeCases(jsPath) {
     }
 }
 
-// ── 3. FFmpeg class API ──────────────────────────────────────────────────────
+// ── 3. Decoder raw API ───────────────────────────────────────────────────────
+
+async function testDecoderApi(jsPath) {
+    section('decoder raw API');
+
+    if (!fs.existsSync(jsPath)) { skip('decoder API', 'cpu build not found'); return; }
+
+    const mod = await loadWasm(jsPath);
+
+    {
+        const garbage = new Uint8Array([0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE, 0x00, 0x00]);
+        const ptr = mod._malloc(garbage.byteLength);
+        mod.HEAPU8.set(garbage, ptr);
+        const h = mod.ccall('decoder_open', 'number',
+            ['number','number'], [ptr, garbage.byteLength]);
+        mod._free(ptr);
+        ok('decoder_open with garbage returns < 0', h < 0);
+    }
+}
+
+// ── 4. FFmpeg class API ──────────────────────────────────────────────────────
 
 async function testFFmpegClass(cpuJsPath) {
     section('FFmpeg class API');
@@ -296,6 +316,7 @@ const webgpuJs = path.join(ROOT, 'dist/webgpu.js');
 await testBuild('CPU build',    cpuJs);
 await testBuild('WebGPU build', webgpuJs);
 await testPipelineEdgeCases(cpuJs);
+await testDecoderApi(cpuJs);
 await testFFmpegClass(cpuJs);
 await testGpu(cpuJs);
 
