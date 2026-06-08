@@ -1,18 +1,21 @@
 /**
- * test.mjs — functional test suite for both CPU and WebGPU WASM builds.
+ * test.mjs — functional test suite for wasmpeg.
  *
- * Run: node tests/test.mjs
- * Requires Node >= 18.
+ * Run:  node tests/test.mjs
+ * Gate: make verify
  */
 
-import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
+import { createRequire }  from 'module';
+import { fileURLToPath }  from 'url';
 import path from 'path';
-import fs from 'fs';
+import fs   from 'fs';
+
+// Emscripten 3.1.6 EXPORT_ES6 output still uses bare `require()` in the
+// Node.js code path. Expose it on globalThis so the IIFE can find it.
+globalThis.require ??= createRequire(import.meta.url);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT      = path.join(__dirname, '..');
-const require   = createRequire(import.meta.url);
 
 let passed = 0, failed = 0, skipped = 0;
 
@@ -24,6 +27,8 @@ function ok(label, cond) {
 function skip(label, reason) {
     console.log(`  SKIP  ${label}  (${reason})`); skipped++;
 }
+
+function section(name) { console.log(`\n── ${name} ──`); }
 
 function makeGradient(w, h) {
     const buf = new Uint8Array(w * h * 4);
@@ -39,16 +44,17 @@ function makeGradient(w, h) {
 }
 
 async function testBuild(name, jsPath) {
-    console.log(`\n── ${name} ──`);
+    section(`pipeline / ${name}`);
 
     if (!fs.existsSync(jsPath)) {
         skip(name, 'not built');
         return;
     }
 
-    const factory = require(jsPath);
+    const { default: factory } = await import(jsPath);
+    const wasmBin = fs.readFileSync(jsPath.replace(/\.js$/, '.wasm'));
     let mod;
-    try { mod = await factory(); }
+    try { mod = await factory({ wasmBinary: wasmBin }); }
     catch (e) { console.error(`  FAIL  load: ${e.message}`); failed++; return; }
 
     const ver = mod.ccall('pipeline_version', 'string', [], []);
@@ -64,7 +70,6 @@ async function testBuild(name, jsPath) {
         return ptr;
     };
 
-    // CPU scale
     {
         const srcPtr = allocU8(src);
         const dstPtr = mod._malloc(DST_W * DST_H * 4);
@@ -77,7 +82,6 @@ async function testBuild(name, jsPath) {
         mod._free(srcPtr); mod._free(dstPtr);
     }
 
-    // GPU scale (skip in Node — needs browser WebGPU)
     if (mod._pipeline_run_rgba_gpu) {
         const srcPtr = allocU8(src);
         const dstPtr = mod._malloc(DST_W * DST_H * 4);
@@ -89,12 +93,11 @@ async function testBuild(name, jsPath) {
             ok(`pipeline_run_rgba_gpu returns 0`,       true);
             ok(`pipeline_run_rgba_gpu output non-zero`, out.some(v => v !== 0));
         } else {
-            skip(`pipeline_run_rgba_gpu`, 'no WebGPU adapter in Node — test in browser');
+            skip(`pipeline_run_rgba_gpu`, 'no WebGPU adapter in Node');
         }
         mod._free(srcPtr); mod._free(dstPtr);
     }
 
-    // CPU bench
     {
         const ms = mod.ccall('bench_scale_cpu', 'number',
             ['number','number','number','number','number'],
@@ -107,5 +110,6 @@ async function testBuild(name, jsPath) {
 await testBuild('CPU build',    path.join(ROOT, 'dist/cpu.js'));
 await testBuild('WebGPU build', path.join(ROOT, 'dist/webgpu.js'));
 
-console.log(`\n${passed + failed + skipped} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
+const total = passed + failed + skipped;
+console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
 process.exit(failed > 0 ? 1 : 0);
