@@ -194,6 +194,18 @@ async function testPipelineEdgeCases(jsPath) {
         ok('same-size scale output non-zero', out.some(v => v !== 0));
         mod._free(srcPtr); mod._free(dstPtr);
     }
+
+    {
+        const srcPtr = allocU8(src);
+        const dstPtr = mod._malloc(32 * 32 * 4);
+        const ret = mod.ccall('pipeline_run_rgba', 'number',
+            ['number','number','number','number','number','number','string'],
+            [srcPtr, W, H, dstPtr, 32, 32, 'scale=32:32,format=rgba']);
+        const out = new Uint8Array(mod.HEAPU8.buffer, dstPtr, 32 * 32 * 4);
+        ok('scale+format filtergraph returns 0',       ret === 0);
+        ok('scale+format filtergraph output non-zero', out.some(v => v !== 0));
+        mod._free(srcPtr); mod._free(dstPtr);
+    }
 }
 
 // ── 3. FFmpeg class API ──────────────────────────────────────────────────────
