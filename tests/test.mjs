@@ -206,6 +206,13 @@ async function testPipelineEdgeCases(jsPath) {
         ok('scale+format filtergraph output non-zero', out.some(v => v !== 0));
         mod._free(srcPtr); mod._free(dstPtr);
     }
+
+    {
+        const val = mod.ccall('bench_scale_webgpu', 'number',
+            ['number','number','number','number','number'],
+            [W, H, 32, 32, 1]);
+        ok('bench_scale_webgpu returns -1 on CPU build', val === -1);
+    }
 }
 
 // ── 3. FFmpeg class API ──────────────────────────────────────────────────────
