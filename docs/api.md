@@ -26,7 +26,7 @@ Runs an FFmpeg filtergraph on a raw RGBA8 frame. `src` and `dst` are row-major, 
 
 Example filtergraph strings: `"scale=1280:720"`, `"scale,format=yuv420p"`, `"crop=640:480:0:0"`.
 
-Available filters (standard preset): `scale`, `crop`, `overlay`, `format`, `transpose`, `rotate`, `pad`, `trim`, `setpts`, `fps`, `split`, `drawtext`, `colorspace`, `hstack`, `vstack`, `aresample`.
+Available filters (standard preset): `scale`, `crop`, `overlay`, `format`, `transpose`, `rotate`, `pad`, `trim`, `setpts`, `fps`, `split`, `colorspace`, `hstack`, `vstack`, `aresample`.
 
 ### `pipeline_run_rgba_gpu`
 

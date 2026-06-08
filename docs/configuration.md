@@ -20,7 +20,7 @@ custom: {
     muxers:    ['mp4', 'null'],
     parsers:   ['h264', 'vp9', 'aac', 'opus', 'png'],
     protocols: ['file'],
-    filters:   ['buffer', 'buffersink', 'scale', 'format'],
+    filters:   ['scale', 'format'],
 },
 ```
 
