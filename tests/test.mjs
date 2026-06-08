@@ -276,6 +276,8 @@ async function testDecoderApi(jsPath) {
         mod._free(frameBuf);
         mod.ccall('decoder_close', null, ['number'], [handle]);
         ok('decoder_close does not crash', true);
+        ok('decoder_width after close returns -1',  mod.ccall('decoder_width',  'number', ['number'], [handle]) === -1);
+        ok('decoder_height after close returns -1', mod.ccall('decoder_height', 'number', ['number'], [handle]) === -1);
     }
 }
 
