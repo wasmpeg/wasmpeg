@@ -1,6 +1,11 @@
 /**
  * test.mjs — functional test suite for wasmpeg.
  *
+ * Tests three layers:
+ *   1. Raw pipeline exports (ccall/cwrap against the WASM module directly)
+ *   2. FFmpeg class API  (ffmpeg.wasm-compatible: load/exec/writeFile/readFile)
+ *   3. gpu namespace     (typed pipeline: gpu.load / gpu.scale)
+ *
  * Run:  node tests/test.mjs
  * Gate: make verify
  */
@@ -107,8 +112,88 @@ async function testBuild(name, jsPath) {
     }
 }
 
-await testBuild('CPU build',    path.join(ROOT, 'dist/cpu.js'));
-await testBuild('WebGPU build', path.join(ROOT, 'dist/webgpu.js'));
+// ── 2. FFmpeg class API ──────────────────────────────────────────────────────
+
+async function testFFmpegClass(cpuJsPath) {
+    section('FFmpeg class API');
+
+    if (!fs.existsSync(cpuJsPath)) { skip('FFmpeg class', 'cpu build not found'); return; }
+
+    const { FFmpeg } = await import('../src/js/index.js');
+
+    const ff = new FFmpeg();
+    ok('FFmpeg() constructed',    ff instanceof FFmpeg);
+    ok('loaded is false initially', ff.loaded === false);
+
+    const logs = [];
+    ff.on('log', ({ type, message }) => logs.push(`${type}: ${message}`));
+
+    try {
+        await ff.load({ wasmPath: new URL('../dist/cpu.js', import.meta.url).href });
+    } catch (e) {
+        console.error(`  FAIL  load(): ${e.message}`); failed++; return;
+    }
+    ok('load() resolves',     true);
+    ok('loaded is true',      ff.loaded === true);
+
+    const bytes = new Uint8Array([1, 2, 3, 4, 5]);
+    await ff.writeFile('probe.bin', bytes);
+    const back = await ff.readFile('probe.bin');
+    ok('writeFile / readFile roundtrip', back.length === 5 && back[4] === 5);
+
+    await ff.deleteFile('probe.bin');
+    let threw = false;
+    try { await ff.readFile('probe.bin'); } catch { threw = true; }
+    ok('deleteFile removes file', threw);
+
+    skip('exec() / callMain', 'fftools not yet linked into wasm (TODO)');
+
+    ff.terminate();
+    ok('terminate() clears loaded', ff.loaded === false);
+}
+
+// ── 3. gpu namespace ─────────────────────────────────────────────────────────
+
+async function testGpu(cpuJsPath) {
+    section('gpu namespace');
+
+    if (!fs.existsSync(cpuJsPath)) { skip('gpu namespace', 'cpu build not found'); return; }
+
+    const { gpu } = await import('../src/js/index.js');
+
+    try {
+        await gpu.load({ wasmPath: new URL('../dist/cpu.js', import.meta.url).href });
+    } catch (e) {
+        console.error(`  FAIL  gpu.load(): ${e.message}`); failed++; return;
+    }
+    ok('gpu.load() resolves', true);
+    ok('gpu.hasWebGPU() is false in Node', gpu.hasWebGPU() === false);
+
+    const SRC_W = 64, SRC_H = 64, DST_W = 32, DST_H = 32;
+    const src = makeGradient(SRC_W, SRC_H);
+
+    let out;
+    try { out = gpu.scale(src, SRC_W, SRC_H, DST_W, DST_H); }
+    catch (e) { console.error(`  FAIL  gpu.scale(): ${e.message}`); failed++; return; }
+
+    ok('gpu.scale() returns Uint8ClampedArray',       out instanceof Uint8ClampedArray);
+    ok('gpu.scale() output size correct',             out.length === DST_W * DST_H * 4);
+    ok('gpu.scale() output non-zero',                 out.some(v => v !== 0));
+
+    const benchMs = gpu.benchCpu(SRC_W, SRC_H, DST_W, DST_H, 20);
+    ok('benchCpu() returns positive', benchMs > 0);
+    console.log(`        CPU bench: ${benchMs.toFixed(2)} ms/frame`);
+}
+
+// ── run ──────────────────────────────────────────────────────────────────────
+
+const cpuJs    = path.join(ROOT, 'dist/cpu.js');
+const webgpuJs = path.join(ROOT, 'dist/webgpu.js');
+
+await testBuild('CPU build',    cpuJs);
+await testBuild('WebGPU build', webgpuJs);
+await testFFmpegClass(cpuJs);
+await testGpu(cpuJs);
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
