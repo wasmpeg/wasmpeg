@@ -21,27 +21,29 @@ const DIST   = path.join(ROOT, 'dist');
 
 const PRESETS = {
     minimal: {
-        decoders: ['h264', 'vp8', 'aac', 'opus', 'mp3'],
-        encoders: ['aac', 'mjpeg', 'png'],
-        demuxers: ['mov', 'mp4', 'matroska', 'ogg', 'mp3', 'image2'],
-        muxers:   ['mp4', 'webm', 'ogg', 'image2', 'null'],
-        parsers:  ['h264', 'vp8', 'aac', 'opus'],
-        filters:  ['buffer', 'buffersink', 'scale', 'crop', 'overlay',
-                   'aresample', 'hstack', 'vstack', 'format'],
+        decoders:  ['h264', 'vp8', 'aac', 'opus', 'mp3'],
+        encoders:  ['aac', 'mjpeg', 'png'],
+        demuxers:  ['mov', 'mp4', 'matroska', 'ogg', 'mp3', 'image2', 'image2pipe', 'image_png_pipe'],
+        muxers:    ['mp4', 'webm', 'ogg', 'image2', 'null'],
+        parsers:   ['h264', 'vp8', 'aac', 'opus', 'png'],
+        protocols: ['file'],
+        filters:   ['buffer', 'buffersink', 'scale', 'crop', 'overlay',
+                    'aresample', 'hstack', 'vstack', 'format'],
         desc: 'H264/VP8 decode, AAC/MJPEG/PNG encode, basic filters',
     },
     standard: {
-        decoders: ['h264', 'hevc', 'vp8', 'vp9', 'av1', 'aac', 'opus',
-                   'mp3', 'vorbis', 'png', 'mjpeg', 'gif', 'flac'],
-        encoders: ['aac', 'opus', 'flac', 'mjpeg', 'png', 'gif'],
-        demuxers: ['mov', 'mp4', 'matroska', 'ogg', 'mp3', 'wav',
-                   'image2', 'concat', 'flac'],
-        muxers:   ['mp4', 'webm', 'ogg', 'image2', 'wav', 'null', 'flac'],
-        parsers:  ['h264', 'hevc', 'vp8', 'vp9', 'aac', 'opus'],
-        filters:  ['buffer', 'buffersink', 'scale', 'crop', 'overlay',
-                   'aresample', 'hstack', 'vstack', 'format', 'transpose',
-                   'rotate', 'pad', 'trim', 'setpts', 'fps', 'split',
-                   'drawtext', 'colorspace'],
+        decoders:  ['h264', 'hevc', 'vp8', 'vp9', 'av1', 'aac', 'opus',
+                    'mp3', 'vorbis', 'png', 'mjpeg', 'gif', 'flac'],
+        encoders:  ['aac', 'opus', 'flac', 'mjpeg', 'png', 'gif'],
+        demuxers:  ['mov', 'mp4', 'matroska', 'ogg', 'mp3', 'wav',
+                    'image2', 'image2pipe', 'image_png_pipe', 'concat', 'flac'],
+        muxers:    ['mp4', 'webm', 'ogg', 'image2', 'wav', 'null', 'flac'],
+        parsers:   ['h264', 'hevc', 'vp8', 'vp9', 'aac', 'opus', 'png'],
+        protocols: ['file'],
+        filters:   ['buffer', 'buffersink', 'scale', 'crop', 'overlay',
+                    'aresample', 'hstack', 'vstack', 'format', 'transpose',
+                    'rotate', 'pad', 'trim', 'setpts', 'fps', 'split',
+                    'drawtext', 'colorspace'],
         desc: 'Broad decode support, safe native encoders, common filters',
     },
 };
@@ -75,6 +77,7 @@ function buildFlags(preset, webgpu) {
         '--disable-debug', '--disable-runtime-cpudetect', '--disable-autodetect',
         '--enable-small', '--disable-pthreads', '--disable-network',
         '--disable-everything',
+        '--enable-zlib',
         '--enable-avcodec', '--enable-avformat', '--enable-avfilter',
         '--enable-avutil', '--enable-swscale', '--enable-swresample',
         ...p.decoders.map(c => `--enable-decoder=${c}`),
@@ -82,6 +85,7 @@ function buildFlags(preset, webgpu) {
         ...p.demuxers.map(c => `--enable-demuxer=${c}`),
         ...p.muxers.map(c  => `--enable-muxer=${c}`),
         ...p.parsers.map(c => `--enable-parser=${c}`),
+        ...p.protocols.map(x => `--enable-protocol=${x}`),
         ...p.filters.map(f => `--enable-filter=${f}`),
     ];
     if (webgpu) {
@@ -140,7 +144,7 @@ async function main() {
         const extraCflags  = webgpu ? '-O3 --use-port=emdawnwebgpu' : '-O3 -msimd128';
         const extraLdflags = webgpu
             ? '-O3 --use-port=emdawnwebgpu -s ASYNCIFY -s INITIAL_MEMORY=67108864'
-            : '-O3';
+            : '-O3 -lz';
 
         const content = [
             '#!/bin/bash',
