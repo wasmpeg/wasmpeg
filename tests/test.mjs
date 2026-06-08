@@ -381,6 +381,11 @@ async function testGpu(cpuJsPath) {
         console.error(`  FAIL  gpu.load(): ${e.message}`); failed++; return;
     }
     ok('gpu.load() resolves', true);
+
+    let doubleThrew = false;
+    try { await gpu.load({ wasmPath: new URL('../dist/cpu.js', import.meta.url).href }); } catch { doubleThrew = true; }
+    ok('double gpu.load() does not throw', !doubleThrew);
+
     ok('gpu.hasWebGPU() is false in Node', gpu.hasWebGPU() === false);
 
     const SRC_W = 64, SRC_H = 64, DST_W = 32, DST_H = 32;
