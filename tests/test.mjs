@@ -331,8 +331,12 @@ async function testFFmpegClass(cpuJsPath) {
     ok('double load() does not throw',          !doubleLoadThrew);
     ok('loaded still true after double load',   ff.loaded === true);
 
+    ff.off('log', ({ type, message }) => logs.push(`${type}: ${message}`));
+    const countBefore = logs.length;
+
     const bytes = new Uint8Array([1, 2, 3, 4, 5]);
     await ff.writeFile('probe.bin', bytes);
+    ok('off() stopped log events after removal', logs.length === countBefore);
     const back = await ff.readFile('probe.bin');
     ok('writeFile / readFile roundtrip', back.length === 5 && back[4] === 5);
 
