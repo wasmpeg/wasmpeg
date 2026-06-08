@@ -354,7 +354,9 @@ async function testFFmpegClass(cpuJsPath) {
     try { await ff.readFile('probe.bin'); } catch { threw = true; }
     ok('deleteFile removes file', threw);
 
-    skip('exec() / callMain', 'fftools not yet linked into wasm (TODO)');
+    let execMsg = '';
+    try { await ff.exec(['-version']); } catch (e) { execMsg = e.message; }
+    ok('exec() throws with expected message', execMsg.includes('exec() not available'));
 
     ff.terminate();
     ok('terminate() clears loaded', ff.loaded === false);
