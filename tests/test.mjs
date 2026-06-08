@@ -360,6 +360,10 @@ async function testFFmpegClass(cpuJsPath) {
 
     ff.terminate();
     ok('terminate() clears loaded', ff.loaded === false);
+
+    const ff2 = new FFmpeg();
+    ff2.on('progress', () => {});
+    ok('on("progress") registers without crashing', true);
 }
 
 // ── 3. gpu namespace ─────────────────────────────────────────────────────────
