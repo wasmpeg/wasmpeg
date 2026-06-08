@@ -233,6 +233,13 @@ async function testDecoderApi(jsPath) {
         mod._free(ptr);
         ok('decoder_open with garbage returns < 0', h < 0);
     }
+
+    {
+        ok('decoder_width(-1) returns -1',   mod.ccall('decoder_width',   'number', ['number'], [-1]) === -1);
+        ok('decoder_height(-1) returns -1',  mod.ccall('decoder_height',  'number', ['number'], [-1]) === -1);
+        ok('decoder_fps_num(-1) returns -1', mod.ccall('decoder_fps_num', 'number', ['number'], [-1]) === -1);
+        ok('decoder_fps_den(-1) returns -1', mod.ccall('decoder_fps_den', 'number', ['number'], [-1]) === -1);
+    }
 }
 
 // ── 4. FFmpeg class API ──────────────────────────────────────────────────────
