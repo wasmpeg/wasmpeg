@@ -39,6 +39,16 @@ export class FFmpeg {
 
         const emit = (type, message) => this.#log.forEach(h => h({ type, message }));
 
+        // Node.js 18+ has a built-in fetch(), which Emscripten 3.1.6 doesn't
+        // anticipate. Passing wasmBinary directly bypasses the fetch/readFile
+        // path entirely and works in both browser and Node.
+        const isNode = typeof process !== 'undefined' && process.versions?.node;
+        let nodeOpts = {};
+        if (isNode) {
+            const { default: fsMod } = await import('node:fs');
+            nodeOpts = { wasmBinary: fsMod.readFileSync(new URL(path).pathname.replace(/\.js$/, '.wasm')) };
+        }
+
         const { default: factory } = await import(/* @vite-ignore */ path);
         this.#mod = await factory({
             print:    msg => emit('stdout', msg),
