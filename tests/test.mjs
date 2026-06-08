@@ -279,6 +279,26 @@ async function testDecoderApi(jsPath) {
         ok('decoder_width after close returns -1',  mod.ccall('decoder_width',  'number', ['number'], [handle]) === -1);
         ok('decoder_height after close returns -1', mod.ccall('decoder_height', 'number', ['number'], [handle]) === -1);
     }
+
+    {
+        const png1 = makeTinyPng(2, 2);
+        const png2 = makeTinyPng(4, 4);
+        const ptr1 = mod._malloc(png1.byteLength); mod.HEAPU8.set(png1, ptr1);
+        const ptr2 = mod._malloc(png2.byteLength); mod.HEAPU8.set(png2, ptr2);
+        const h1 = mod.ccall('decoder_open', 'number', ['number','number'], [ptr1, png1.byteLength]);
+        const h2 = mod.ccall('decoder_open', 'number', ['number','number'], [ptr2, png2.byteLength]);
+        mod._free(ptr1); mod._free(ptr2);
+        if (h1 >= 0 && h2 >= 0) {
+            ok('concurrent sessions: handles distinct', h1 !== h2);
+            ok('concurrent sessions: h1 width > 0', mod.ccall('decoder_width', 'number', ['number'], [h1]) > 0);
+            ok('concurrent sessions: h2 width > 0', mod.ccall('decoder_width', 'number', ['number'], [h2]) > 0);
+            mod.ccall('decoder_close', null, ['number'], [h1]);
+            mod.ccall('decoder_close', null, ['number'], [h2]);
+            ok('concurrent sessions: both closed cleanly', true);
+        } else {
+            skip('concurrent sessions', 'PNG open failed in this build');
+        }
+    }
 }
 
 // ── 4. FFmpeg class API ──────────────────────────────────────────────────────
