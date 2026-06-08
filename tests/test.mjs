@@ -399,6 +399,13 @@ async function testGpu(cpuJsPath) {
     ok('gpu.scale() output size correct',             out.length === DST_W * DST_H * 4);
     ok('gpu.scale() output non-zero',                 out.some(v => v !== 0));
 
+    let out2;
+    try { out2 = gpu.scale(src, SRC_W, SRC_H, DST_W, DST_H, `scale=${DST_W}:${DST_H}`); } catch { out2 = null; }
+    if (out2) {
+        ok('gpu.scale() explicit filtergraph size correct', out2.length === DST_W * DST_H * 4);
+        ok('gpu.scale() explicit filtergraph non-zero',     out2.some(v => v !== 0));
+    }
+
     const benchMs = gpu.benchCpu(SRC_W, SRC_H, DST_W, DST_H, 20);
     ok('benchCpu() returns positive', benchMs > 0);
     console.log(`        CPU bench: ${benchMs.toFixed(2)} ms/frame`);
