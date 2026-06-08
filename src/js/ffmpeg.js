@@ -57,6 +57,7 @@ export class FFmpeg {
                 const m = msg.match(/time=(\S+)/);
                 if (m) this.#prog.forEach(h => h({ progress: m[1] }));
             },
+            ...nodeOpts,
         });
     }
 
@@ -92,14 +93,10 @@ export class FFmpeg {
 
     async exec(args, { timeout = 0 } = {}) {
         this.#assertLoaded();
-        return new Promise((resolve, reject) => {
-            try {
-                const ret = this.#mod.callMain(args);
-                resolve(ret ?? 0);
-            } catch (e) {
-                reject(e);
-            }
-        });
+        // callMain requires the FFmpeg program (fftools/*.c) to be compiled into
+        // the wasm binary. Currently only pipeline.c is linked; exec() is not
+        // yet functional. See build.sh for the TODO.
+        throw new Error('exec() not available: fftools/main not linked (TODO)');
     }
 
     terminate() {
