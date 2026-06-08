@@ -38,9 +38,10 @@ build_target() {
             -s WASM=1 \
             -s ASYNCIFY \
             -s MODULARIZE=1 \
+            -s EXPORT_ES6=1 \
             -s EXPORT_NAME="FFmpegWebGPU" \
             -s EXPORTED_FUNCTIONS="[$WEBGPU_EXPORTS]" \
-            -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","HEAPU8"]' \
+            -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","HEAPU8","FS"]' \
             -s INITIAL_MEMORY=67108864 \
             -s ALLOW_MEMORY_GROWTH=1 \
             -DCONFIG_WEBGPU \
@@ -54,14 +55,20 @@ build_target() {
             -lavfilter -lavcodec -lavformat -lavutil -lswscale -lswresample \
             -s WASM=1 \
             -s MODULARIZE=1 \
+            -s EXPORT_ES6=1 \
             -s EXPORT_NAME="FFmpegCPU" \
             -s EXPORTED_FUNCTIONS="[$CPU_EXPORTS]" \
-            -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","HEAPU8"]' \
+            -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","HEAPU8","FS"]' \
             -s INITIAL_MEMORY=67108864 \
             -s ALLOW_MEMORY_GROWTH=1 \
             -O3 \
             -o "$DIST/cpu.js"
     fi
+
+    # Emscripten 3.1.6 uses __dirname in the Node.js code path even with
+    # EXPORT_ES6=1; patch it to the ESM equivalent so tests run under Node.
+    local out="$DIST/${t}.js"
+    sed -i 's|scriptDirectory=__dirname+"/"|scriptDirectory=new URL(".",import.meta.url).pathname|g' "$out"
 
     echo "==> $t done -> dist/${t}.{js,wasm}"
 }
