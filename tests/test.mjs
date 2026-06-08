@@ -262,7 +262,20 @@ async function testDecoderApi(jsPath) {
         const fpsDen = mod.ccall('decoder_fps_den', 'number', ['number'], [handle]);
         ok('decoder_fps_num returns > 0', fpsNum > 0);
         ok('decoder_fps_den returns > 0', fpsDen > 0);
+
+        const frameBuf = mod._malloc(w * h * 4);
+        const fret = mod.ccall('decoder_next_frame', 'number',
+            ['number','number','number','number'], [handle, frameBuf, w, h]);
+        ok('decoder_next_frame returns 0 or 1', fret === 0 || fret === 1);
+        if (fret === 0) {
+            const pixels = new Uint8Array(mod.HEAPU8.buffer, frameBuf, w * h * 4);
+            ok('decoder_next_frame output non-zero', pixels.some(v => v !== 0));
+        } else {
+            skip('decoder_next_frame output', 'EOF on first call');
+        }
+        mod._free(frameBuf);
         mod.ccall('decoder_close', null, ['number'], [handle]);
+        ok('decoder_close does not crash', true);
     }
 }
 
