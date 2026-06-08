@@ -156,7 +156,35 @@ async function testBuild(name, jsPath) {
     }
 }
 
-// ── 2. FFmpeg class API ──────────────────────────────────────────────────────
+// ── 2. Pipeline edge cases ────────────────────────────────────────────────────
+
+async function testPipelineEdgeCases(jsPath) {
+    section('pipeline / edge cases');
+
+    if (!fs.existsSync(jsPath)) { skip('pipeline edge cases', 'cpu build not found'); return; }
+
+    const mod = await loadWasm(jsPath);
+    const W = 64, H = 64;
+    const src = makeGradient(W, H);
+
+    const allocU8 = buf => {
+        const ptr = mod._malloc(buf.byteLength);
+        mod.HEAPU8.set(buf, ptr);
+        return ptr;
+    };
+
+    {
+        const srcPtr = allocU8(src);
+        const dstPtr = mod._malloc(W * H * 4);
+        const ret = mod.ccall('pipeline_run_rgba', 'number',
+            ['number','number','number','number','number','number','string'],
+            [srcPtr, W, H, dstPtr, W, H, 'notarealfilter=1:1']);
+        ok('invalid filtergraph returns non-zero', ret !== 0);
+        mod._free(srcPtr); mod._free(dstPtr);
+    }
+}
+
+// ── 3. FFmpeg class API ──────────────────────────────────────────────────────
 
 async function testFFmpegClass(cpuJsPath) {
     section('FFmpeg class API');
@@ -236,6 +264,7 @@ const webgpuJs = path.join(ROOT, 'dist/webgpu.js');
 
 await testBuild('CPU build',    cpuJs);
 await testBuild('WebGPU build', webgpuJs);
+await testPipelineEdgeCases(cpuJs);
 await testFFmpegClass(cpuJs);
 await testGpu(cpuJs);
 
