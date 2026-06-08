@@ -2,108 +2,90 @@
 
 ## Running the suite
 
+Build first, then run:
+
 ```bash
-# Build first — tests load dist/cpu.js directly
 source ~/emsdk/emsdk_env.sh
 PRESET=standard TARGET=cpu bash scripts/build.sh
-
 node tests/test.mjs
 ```
 
-Expected on a clean build:
+A clean build produces:
+
 ```
 Pass: 63
 Fail: 0
 Skip: 1
 ```
 
-The one skip is the WebGPU bench test — it only runs when `dist/webgpu.js` exists. Everything else passes.
+The skip is the WebGPU bench test — it only runs when `dist/webgpu.js` is present.
 
-## Test structure
+## Test layout
 
-`tests/test.mjs` is a single file with no external framework.
+`tests/test.mjs` is a single file with no external framework. It has four test groups, each exercising a different layer of the stack:
 
-```
-tests/test.mjs
-├─ ok(msg, cond)           assertion helper
-├─ skip(msg)               expected-skip helper
-├─ loadWasm()              loads dist/cpu.js, returns raw WASM module
-├─ makeTinyPng(w, h)       generates a valid minimal PNG in pure JS
-├─ crc32(buf)              CRC32 for PNG chunk building
-├─ pngChunk(type, data)    builds a raw PNG chunk
-│
-├─ testBuild()             pipeline_version(), export smoke test
-├─ testPipelineEdgeCases() raw C API: filtergraph errors, passthrough, bench
-├─ testDecoderApi()        raw C decoder API: open, dims, frames, close, concurrency
-├─ testFFmpegClass()       FFmpeg high-level class (ffmpeg.js)
-├─ testGpu()               gpu namespace: load, scale, decoder, bench
-└─ run()                   sequential runner, prints Pass/Fail/Skip
-```
+**`testBuild`** — sanity checks that the WASM module loaded correctly: `pipeline_version()` returns a non-zero integer and `pipeline_run_rgba` is exported.
 
-**testBuild** — loads the module, checks `pipeline_version()` returns non-zero, verifies `pipeline_run_rgba` is exported.
+**`testPipelineEdgeCases`** — calls `pipeline_run_rgba` directly with various filtergraph strings: an invalid graph returns a negative error code, a same-size passthrough produces correct output, and a chained `scale,format` graph works end to end.
 
-**testPipelineEdgeCases** — raw `pipeline_run_rgba` calls: invalid filtergraph returns negative error, same-size scale passthrough works, chained `scale,format` filtergraph works, `bench_scale_webgpu` returns -1 on CPU build.
+**`testDecoderApi`** — exercises the raw C decoder API. Covers garbage input rejection, invalid-handle guards, opening a PNG via `decoder_open_file`, reading frame dimensions and fps, decoding a frame and checking RGBA output, post-close guards, and two concurrent decoder slots.
 
-**testDecoderApi** — raw decoder C API: garbage bytes to `decoder_open` returns error, invalid handles return -1/0, opens a valid PNG via `decoder_open_file`, checks width/height/fps, calls `decoder_next_frame` and reads RGBA from HEAPU8, calls `decoder_close`, verifies post-close guards work, two concurrent decoder slots.
+**`testFFmpegClass`** — exercises the high-level `FFmpeg` class: load, double-load idempotency, `on()`/`off()` events, `createDir`/`listDir`, `writeFile`/`readFile` round-trip, the `exec()` not-available error, and `terminate()`.
 
-**testFFmpegClass** — FFmpeg class: `load()` emits log events, double `load()` is idempotent, `on()`/`off()` work, `createDir()`/`listDir()` via WASM FS, `writeFile()`/`readFile()` round-trip, `exec()` throws with a clear message (fftools not compiled in), `terminate()` cleans up.
-
-**testGpu** — `gpu` namespace: `load()` resolves, `hasWebGPU` is false on CPU build, double load is idempotent, `scale()` returns correct-sized RGBA, explicit filtergraph works, `benchCpu()` returns a positive number, `benchGpu()` returns -1 on CPU build, `createDecoder()` with garbage throws, `createDecoderFile()` with valid PNG works, `decoder.nextFrame()` returns pixels, `decoder.close()` doesn't throw.
+**`testGpu`** — exercises the `gpu` namespace: load, scale, explicit filtergraph, `benchCpu`, `benchGpu` (returns -1 on CPU build), `createDecoder` error path, and `createDecoderFile` success path.
 
 ## Adding a test
 
-Find the right function, use `ok(msg, condition)`. All test functions are async.
+Find the appropriate group and use the `ok(msg, condition)` helper. All test functions are async.
 
 ```js
 // Inside testDecoderApi():
 {
     const bytes = makeTinyPng(16, 16);
-    mod.FS.writeFile('/mytest.png', new Uint8Array(bytes));
-    const h = mod.ccall('decoder_open_file', 'number', ['string'], ['/mytest.png']);
-    ok('decoder_open_file 16x16 succeeds', h >= 0);
-    const w = mod.ccall('decoder_width', 'number', ['number'], [h]);
-    ok('width is 16', w === 16);
-    mod.ccall('decoder_close', 'number', ['number'], [h]);
+    mod.FS.writeFile('/test.png', new Uint8Array(bytes));
+    const h = mod.ccall('decoder_open_file', 'number', ['string'], ['/test.png']);
+    ok('open 16×16 PNG', h >= 0);
+    ok('width is 16', mod.ccall('decoder_width', 'number', ['number'], [h]) === 16);
+    mod.ccall('decoder_close', null, ['number'], [h]);
 }
 ```
 
-For a new C export, add it to `DECODER_EXPORTS` or `CPU_EXPORTS` in `build.sh` first, then relink. See [api.md](api.md) for ccall type mapping.
+If a test only makes sense under a specific condition, use `skip()`:
 
-For a skip that depends on a condition:
 ```js
 if (!someCondition) {
-    skip('reason this is not testable here');
+    skip('reason this cannot run here');
 } else {
-    ok('the actual assertion', someAssertion);
+    ok('the assertion', result === expected);
 }
 ```
 
-## What tests don't cover
+When adding a new C export, add it to `DECODER_EXPORTS` or `CPU_EXPORTS` in `scripts/build.sh` and relink before testing. See the [API reference](api.md#c-api) for `ccall` type mappings.
 
-**Real video/audio** — H.264, HEVC, VP9, AAC, Opus. Generating valid compressed test vectors in pure JS isn't feasible. The ffmpeg CLI isn't compiled in, so we can't transcode. PNG is the smoke test for the decoder pipeline because it can be built from scratch in pure JS. Real video tests would require committing binary fixture files.
+## What isn't tested
 
-**WebGPU scale** — needs a real GPU context. Not available in Node.js. The browser test at `tests/browser-test.html` (gitignored) covers this manually.
+**Real video and audio** — H.264, HEVC, VP9, AAC, Opus. Generating valid compressed test vectors in pure JS isn't practical, and the `ffmpeg` CLI isn't compiled into the WASM binary. PNG covers the decoder pipeline because it can be constructed from scratch in pure JS. Real video tests would require shipping binary fixture files.
 
-**Encoder pipeline** — the pipeline currently handles decode + scale only. No encoder stage yet.
+**WebGPU scale** — requires a live GPU context, which Node.js doesn't provide. This is tested manually in a browser.
 
-**FATE tests** — FFmpeg's official test suite requires the `ffmpeg`/`ffprobe`/`ffplay` CLI tools, which aren't compiled into wasmpeg.
+**Encoder pipeline** — the pipeline currently handles decode and scale only; there's no encoder stage yet.
 
 ## Debugging failures
 
-**Silent exit / no output** — WASM failed to load. Check `dist/cpu.js` and `dist/cpu.wasm` exist: `ls -lh dist/`
+**Silent exit** — the WASM module failed to load. Verify `dist/cpu.js` and `dist/cpu.wasm` both exist.
 
-**`decoder_open_file failed: -1330794744`** — `AVERROR_PROTOCOL_NOT_FOUND`. The `file` protocol isn't compiled in. Check `grep CONFIG_FILE_PROTOCOL vendor/ffmpeg/config_components.h` — should be `1`.
-
-**`decoder_open_file failed: -1094995529`** — `AVERROR_INVALIDDATA`. Either bad PNG data or `avio_size()` returned -1. If the PNG looks valid, check `grep CONFIG_ZLIB vendor/ffmpeg/config_components.h` — should be `1`. Missing zlib silently breaks PNG decode.
-
-**`decoder_open_file failed: -2`** — `AVERROR(ENOENT)`. The path doesn't exist in the WASM FS. Check `mod.FS.writeFile(path, ...)` was called before `decoder_open_file`.
-
-**"Video: png, none: unspecified size"** — `avformat_find_stream_info` opened the stream but couldn't get dimensions. Almost always `CONFIG_ZLIB 0`. Rebuild with `--enable-zlib` and `--use-port=zlib`.
-
-**Unexpected failure count** — temporarily add per-test logging inside `ok()` to see which assertion failed:
-```js
-function ok(msg, cond) {
-    if (!cond) console.error(`  FAIL: ${msg}`);
-    // ...
-}
+**`decoder_open_file failed: -1330794744`** — `AVERROR_PROTOCOL_NOT_FOUND`. The `file` protocol wasn't compiled in. Check:
+```bash
+grep CONFIG_FILE_PROTOCOL vendor/ffmpeg/config_components.h
 ```
+Should be `1`. If it's `0`, add `file` to the `protocols` list in `configure.mjs` and rebuild.
+
+**`decoder_open_file failed: -1094995529`** — `AVERROR_INVALIDDATA`. Either the input is malformed, or zlib is missing and PNG IDAT decompression is silently failing. Check:
+```bash
+grep CONFIG_ZLIB vendor/ffmpeg/config_components.h
+```
+Should be `1`. If it's `0`, see [configuration.md](configuration.md#external-library-dependencies).
+
+**`decoder_open_file failed: -2`** — `AVERROR(ENOENT)`. The path doesn't exist in the WASM virtual filesystem. Make sure `mod.FS.writeFile(path, data)` ran before the open call.
+
+**"Video: png, none: unspecified size"** — `avformat_find_stream_info` opened the stream but couldn't determine frame dimensions. Almost always `CONFIG_ZLIB 0` — see above.

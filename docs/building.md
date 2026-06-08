@@ -1,11 +1,11 @@
-# Building wasmpeg
+# Building
 
 ## Prerequisites
 
-| Tool | Version | How to get |
-|------|---------|------------|
-| Node.js | ≥ 18 | `nvm install 22` |
-| emsdk | 6.0.0 | See below |
+- **Node.js** ≥ 18
+- **emsdk** 6.0.0
+
+Install emsdk once:
 
 ```bash
 git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
@@ -14,63 +14,47 @@ cd ~/emsdk
 ./emsdk activate 6.0.0
 ```
 
-Every terminal session that builds needs:
-```bash
-source ~/emsdk/emsdk_env.sh
-```
+> **Note:** `source ~/emsdk/emsdk_env.sh` must be run in every new terminal session before building. It does not persist across shells.
 
-## Quick start
+## Building
 
 ```bash
 source ~/emsdk/emsdk_env.sh
 PRESET=standard TARGET=cpu bash scripts/build.sh
 ```
 
-Output:
-```
-dist/cpu.js    (~70KB JS glue)
-dist/cpu.wasm  (~3.8MB)
-```
+This produces `dist/cpu.js` (~70 KB) and `dist/cpu.wasm` (~3.8 MB).
 
-Other targets:
+To build both targets:
+
 ```bash
-TARGET=webgpu bash scripts/build.sh   # WebGPU build
-TARGET=both   bash scripts/build.sh   # both
+TARGET=both bash scripts/build.sh
 ```
 
-## How the build works
+Available targets: `cpu` (default), `webgpu`, `both`.
 
-```
-src/cli/configure.mjs
-    ↓  generates
-configure-cpu.sh
-    ↓  runs
-vendor/ffmpeg/configure  (via emconfigure)
-    ↓  produces
-vendor/ffmpeg/config.h + config_components.h
-    ↓
-emmake make -j$(nproc) install
-    ↓  produces
-build-cpu/lib/  (libavcodec.a, libavformat.a, etc.)
-    ↓
-emcc src/pipeline.c + build-cpu/lib/*.a
-    ↓  produces
-dist/cpu.js + dist/cpu.wasm
-```
+## How it works
 
-**`src/cli/configure.mjs` is the single source of truth** for what goes into the build — codecs, filters, protocols, external libs. Never edit `configure-cpu.sh` directly; it's regenerated on every build.
+`scripts/build.sh` runs three stages:
 
-The FFmpeg configure step runs `emconfigure ./configure` inside `vendor/ffmpeg/` with `--disable-everything` then selective `--enable-*` flags from the preset. Notable flags:
+1. **Configure** — `src/cli/configure.mjs` generates `configure-cpu.sh`, which runs `emconfigure ./configure` inside `vendor/ffmpeg` with `--disable-everything` and selective `--enable-*` flags drawn from the preset. Never edit `configure-cpu.sh` by hand; it's regenerated on every build. See [configuration.md](configuration.md) for how presets work.
 
-- `--extra-cflags="-O3 -msimd128"` — SIMD128 baked in, no size increase
-- `--enable-zlib` + `-lz` — required for PNG/FLAC decoders (IDAT decompression)
-- `--enable-protocol=file` — required for `decoder_open_file()` to read from WASM FS
+2. **Compile** — `emmake make -j$(nproc) install` builds the FFmpeg static libraries into `build-cpu/lib/`. This is the slow step — roughly 3–5 minutes on 16 cores.
 
-The `make install` step is the slow one — about 3–5 minutes on 16 cores. The final `emcc` link is fast (under 30 seconds).
+3. **Link** — `emcc src/pipeline.c` links against the static libraries to produce the final WASM binary. This takes under 30 seconds.
 
-## Incremental builds
+Notable compile flags:
 
-If you only changed `src/pipeline.c` or `src/js/*.js`, skip the full rebuild and just relink:
+| Flag | Purpose |
+|------|---------|
+| `--extra-cflags="-O3 -msimd128"` | WebAssembly SIMD128 — zero size cost, ~2× faster pixel ops |
+| `--enable-zlib` / `-lz` | Required for PNG and FLAC decode |
+| `--enable-protocol=file` | Required for `decoder_open_file()` to access the WASM virtual FS |
+| `--use-port=zlib` | Supplies `libz.a` from Emscripten's port cache at link time |
+
+## Incremental rebuilds
+
+If you only changed `src/pipeline.c` or the JS files under `src/js/`, skip the full FFmpeg build and just relink:
 
 ```bash
 source ~/emsdk/emsdk_env.sh
@@ -88,12 +72,11 @@ emcc src/pipeline.c \
     -s EXPORTED_FUNCTIONS="[$CPU_EXPORTS]" \
     -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","HEAPU8","FS"]' \
     -s INITIAL_MEMORY=67108864 -s ALLOW_MEMORY_GROWTH=1 \
-    -O3 -msimd128 \
-    --use-port=zlib \
+    -O3 -msimd128 --use-port=zlib \
     -o dist/cpu.js
 ```
 
-If you changed codec/demuxer/filter lists in `configure.mjs`, you need configure + make + link — but not `make distclean`. FFmpeg's incremental make only recompiles files that depend on changed config flags:
+If you changed codec or filter lists in `configure.mjs`, run configure and make — but not `make distclean`. FFmpeg's incremental make only recompiles what changed:
 
 ```bash
 source ~/emsdk/emsdk_env.sh
@@ -103,8 +86,4 @@ cd vendor/ffmpeg && emmake make -j$(nproc) install && cd ../..
 # then the emcc link above
 ```
 
-## Environment notes
-
-- `source emsdk_env.sh` must run in the same shell as the build commands. It does not persist.
-- `--use-port=zlib` requires the Emscripten zlib port to be cached. Run this once: `emcc --use-port=zlib -o /dev/null /dev/null 2>/dev/null`
-- `configure-cpu.sh`, `configure-webgpu.sh`, `build-cpu/`, and `build-webgpu/` are gitignored — generated/local only.
+> **Note:** The first time you build with `--use-port=zlib`, Emscripten downloads and caches the port. Seed it once before a full offline build: `emcc --use-port=zlib -o /dev/null /dev/null 2>/dev/null`
