@@ -347,7 +347,7 @@ async function testFFmpegClass(cpuJsPath) {
 
     let execMsg = '';
     try { await ff.exec(['-version']); } catch (e) { execMsg = e.message; }
-    ok('exec() throws with expected message', execMsg.includes('exec() not available'));
+    ok('exec() throws with expected message', execMsg.includes('no -i input'));
 
     ff.terminate();
     ok('terminate() clears loaded', ff.loaded === false);
