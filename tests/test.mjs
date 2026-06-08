@@ -10,15 +10,10 @@
  * Gate: make verify
  */
 
-import { createRequire }  from 'module';
 import { fileURLToPath }  from 'url';
 import { deflateSync }    from 'zlib';
 import path from 'path';
 import fs   from 'fs';
-
-// Emscripten 3.1.6 EXPORT_ES6 output still uses bare `require()` in the
-// Node.js code path. Expose it on globalThis so the IIFE can find it.
-globalThis.require ??= createRequire(import.meta.url);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT      = path.join(__dirname, '..');
