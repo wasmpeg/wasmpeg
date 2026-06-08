@@ -75,13 +75,56 @@ function scale(srcRgba, srcW, srcH, dstW, dstH, filtergraph) {
     return out;
 }
 
-function createDecoder(fileBytes) {
+function createDecoder(fileBytes, fmtName) {
     assertLoaded();
     const srcPtr = allocBytes(fileBytes);
-    const handle = _mod.ccall('decoder_open', 'number',
-        ['number','number'], [srcPtr, fileBytes.byteLength]);
+    const handle = fmtName
+        ? _mod.ccall('decoder_open_format', 'number',
+            ['number','number','string'], [srcPtr, fileBytes.byteLength, fmtName])
+        : _mod.ccall('decoder_open', 'number',
+            ['number','number'], [srcPtr, fileBytes.byteLength]);
     _mod._free(srcPtr);
     if (handle < 0) throw new Error(`decoder_open failed: ${handle}`);
+
+    const width  = _mod.ccall('decoder_width',   'number', ['number'], [handle]);
+    const height = _mod.ccall('decoder_height',  'number', ['number'], [handle]);
+    const fpsNum = _mod.ccall('decoder_fps_num', 'number', ['number'], [handle]);
+    const fpsDen = _mod.ccall('decoder_fps_den', 'number', ['number'], [handle]);
+
+    let bufSize  = width * height * 4;
+    let frameBuf = _mod._malloc(bufSize);
+
+    return {
+        width,
+        height,
+        fps: fpsNum / fpsDen,
+
+        nextFrame(dstW = width, dstH = height) {
+            const needed = dstW * dstH * 4;
+            if (needed > bufSize) {
+                _mod._free(frameBuf);
+                frameBuf = _mod._malloc(needed);
+                bufSize  = needed;
+            }
+            const ret = _mod.ccall('decoder_next_frame', 'number',
+                ['number','number','number','number'],
+                [handle, frameBuf, dstW, dstH]);
+            if (ret === 1) return null;
+            if (ret < 0) throw new Error(`decoder_next_frame failed: ${ret}`);
+            return new Uint8ClampedArray(_mod.HEAPU8.buffer, frameBuf, needed).slice();
+        },
+
+        close() {
+            _mod._free(frameBuf);
+            _mod.ccall('decoder_close', null, ['number'], [handle]);
+        },
+    };
+}
+
+function createDecoderFile(path) {
+    assertLoaded();
+    const handle = _mod.ccall('decoder_open_file', 'number', ['string'], [path]);
+    if (handle < 0) throw new Error(`decoder_open_file failed: ${handle}`);
 
     const width  = _mod.ccall('decoder_width',   'number', ['number'], [handle]);
     const height = _mod.ccall('decoder_height',  'number', ['number'], [handle]);
@@ -132,4 +175,7 @@ function benchCpu(srcW, srcH, dstW, dstH, iters) {
         ['number','number','number','number','number'], [srcW, srcH, dstW, dstH, iters]);
 }
 
-export const gpu = { load, scale, createDecoder, hasWebGPU, benchGpu, benchCpu };
+export const gpu = {
+    load, scale, createDecoder, createDecoderFile, hasWebGPU, benchGpu, benchCpu,
+    get FS() { return _mod && _mod.FS; },
+};
