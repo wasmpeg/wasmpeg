@@ -897,7 +897,11 @@ int encoder_open(const char *fmt_name, const char *codec_name,
     if (!s->codec_ctx) { encoder_cleanup(s); return AVERROR(ENOMEM); }
 
     /* Use the first supported pixel format */
-    enum AVPixelFormat pix_fmt = codec->pix_fmts ? codec->pix_fmts[0] : AV_PIX_FMT_YUV420P;
+    const enum AVPixelFormat *supported_fmts = NULL;
+    avcodec_get_supported_config(NULL, codec, AV_CODEC_CONFIG_PIX_FORMAT, 0,
+                                 (const void **)&supported_fmts, NULL);
+    enum AVPixelFormat pix_fmt = (supported_fmts && supported_fmts[0] != AV_PIX_FMT_NONE)
+                                 ? supported_fmts[0] : AV_PIX_FMT_YUV420P;
 
     s->codec_ctx->width     = width;
     s->codec_ctx->height    = height;
