@@ -325,6 +325,12 @@ async function testFFmpegClass(cpuJsPath) {
     ok('load() resolves',     true);
     ok('loaded is true',      ff.loaded === true);
 
+    let doubleLoadThrew = false;
+    try { await ff.load({ wasmPath: new URL('../dist/cpu.js', import.meta.url).href }); }
+    catch { doubleLoadThrew = true; }
+    ok('double load() does not throw',          !doubleLoadThrew);
+    ok('loaded still true after double load',   ff.loaded === true);
+
     const bytes = new Uint8Array([1, 2, 3, 4, 5]);
     await ff.writeFile('probe.bin', bytes);
     const back = await ff.readFile('probe.bin');
