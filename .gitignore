@@ -1,5 +1,7 @@
 # build output
 dist/
+build-cpu/
+build-webgpu/
 
 # dependencies
 node_modules/
