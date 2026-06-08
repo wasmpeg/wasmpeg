@@ -31,8 +31,15 @@ async function load({ wasmPath } = {}) {
             : new URL('../../dist/cpu.js',    import.meta.url).href
     );
 
+    const isNode = typeof process !== 'undefined' && process.versions?.node;
+    let nodeOpts = {};
+    if (isNode) {
+        const { default: fsMod } = await import('node:fs');
+        nodeOpts = { wasmBinary: fsMod.readFileSync(new URL(path).pathname.replace(/\.js$/, '.wasm')) };
+    }
+
     const { default: factory } = await import(/* @vite-ignore */ path);
-    _mod = await factory();
+    _mod = await factory(nodeOpts);
 }
 
 function assertLoaded() {
