@@ -137,7 +137,7 @@ async function main() {
         const scriptName = `configure-${t}.sh`;
         const script     = path.join(ROOT, scriptName);
 
-        const extraCflags  = webgpu ? '-O3 --use-port=emdawnwebgpu' : '-O3';
+        const extraCflags  = webgpu ? '-O3 --use-port=emdawnwebgpu' : '-O3 -msimd128';
         const extraLdflags = webgpu
             ? '-O3 --use-port=emdawnwebgpu -s ASYNCIFY -s INITIAL_MEMORY=67108864'
             : '-O3';
