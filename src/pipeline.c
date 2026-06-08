@@ -284,8 +284,7 @@ typedef struct {
 
 static DecodeSession g_sessions[MAX_SESSIONS];
 
-EMSCRIPTEN_KEEPALIVE
-int decoder_open(const uint8_t *data, int size)
+static int decoder_open_internal(const uint8_t *data, int size, const char *fmt_name)
 {
     int slot = -1;
     for (int i = 0; i < MAX_SESSIONS; i++)
@@ -303,6 +302,9 @@ int decoder_open(const uint8_t *data, int size)
     uint8_t *avio_buf = av_malloc(AVIO_BUF_SIZE);
     if (!avio_buf) { av_free(s->membuf.data); return AVERROR(ENOMEM); }
 
+    // Always use seekable AVIO: pipe demuxers need avio_size() to size reads,
+    // and forcing a format via av_find_input_format bypasses the probe that
+    // previously rejected seekable streams.
     s->avio_ctx = avio_alloc_context(avio_buf, AVIO_BUF_SIZE, 0,
                                      &s->membuf, mem_read, NULL, mem_seek);
     if (!s->avio_ctx) { av_free(avio_buf); av_free(s->membuf.data); return AVERROR(ENOMEM); }
@@ -316,7 +318,8 @@ int decoder_open(const uint8_t *data, int size)
     }
     s->fmt_ctx->pb = s->avio_ctx;
 
-    int ret = avformat_open_input(&s->fmt_ctx, NULL, NULL, NULL);
+    const AVInputFormat *forced_fmt = fmt_name ? av_find_input_format(fmt_name) : NULL;
+    int ret = avformat_open_input(&s->fmt_ctx, NULL, forced_fmt, NULL);
     if (ret < 0) goto fail;
 
     ret = avformat_find_stream_info(s->fmt_ctx, NULL);
@@ -364,6 +367,87 @@ fail:
     avformat_close_input(&s->fmt_ctx);
     if (s->avio_ctx) { av_freep(&s->avio_ctx->buffer); avio_context_free(&s->avio_ctx); }
     av_free(s->membuf.data);
+    av_packet_free(&s->pkt);
+    av_frame_free(&s->frame);
+    avcodec_free_context(&s->codec_ctx);
+    memset(s, 0, sizeof(*s));
+    return ret;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int decoder_open(const uint8_t *data, int size)
+{
+    return decoder_open_internal(data, size, NULL);
+}
+
+EMSCRIPTEN_KEEPALIVE
+int decoder_open_format(const uint8_t *data, int size, const char *fmt_name)
+{
+    return decoder_open_internal(data, size, fmt_name);
+}
+
+// Open a file from the Emscripten virtual FS by path (avoids custom AVIO).
+// Useful for image files (.png, .jpg) where pipe demuxers have probe limits.
+EMSCRIPTEN_KEEPALIVE
+int decoder_open_file(const char *path)
+{
+    int slot = -1;
+    for (int i = 0; i < MAX_SESSIONS; i++)
+        if (!g_sessions[i].active) { slot = i; break; }
+    if (slot < 0) return AVERROR(ENOMEM);
+
+    DecodeSession *s = &g_sessions[slot];
+    memset(s, 0, sizeof(*s));
+
+    // Force image2 (file-based, non-pipe) so FFmpeg reads PNG as a still image
+    // rather than selecting png_pipe which fails to resolve stream parameters.
+    const AVInputFormat *img2 = av_find_input_format("image2");
+    int ret = avformat_open_input(&s->fmt_ctx, path, img2, NULL);
+    if (ret < 0) goto fail_noavio;
+
+    ret = avformat_find_stream_info(s->fmt_ctx, NULL);
+    if (ret < 0) goto fail_noavio;
+
+    s->video_stream = -1;
+    for (unsigned i = 0; i < s->fmt_ctx->nb_streams; i++) {
+        if (s->fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            s->video_stream = (int)i;
+            break;
+        }
+    }
+    if (s->video_stream < 0) { ret = AVERROR_STREAM_NOT_FOUND; goto fail_noavio; }
+
+    AVStream *st2 = s->fmt_ctx->streams[s->video_stream];
+    const AVCodec *codec2 = avcodec_find_decoder(st2->codecpar->codec_id);
+    if (!codec2) { ret = AVERROR_DECODER_NOT_FOUND; goto fail_noavio; }
+
+    s->codec_ctx = avcodec_alloc_context3(codec2);
+    if (!s->codec_ctx) { ret = AVERROR(ENOMEM); goto fail_noavio; }
+
+    ret = avcodec_parameters_to_context(s->codec_ctx, st2->codecpar);
+    if (ret < 0) goto fail_noavio;
+
+    ret = avcodec_open2(s->codec_ctx, codec2, NULL);
+    if (ret < 0) goto fail_noavio;
+
+    s->width  = s->codec_ctx->width;
+    s->height = s->codec_ctx->height;
+    if (st2->avg_frame_rate.den && st2->avg_frame_rate.num) {
+        s->fps_num = st2->avg_frame_rate.num;
+        s->fps_den = st2->avg_frame_rate.den;
+    } else {
+        s->fps_num = 25; s->fps_den = 1;
+    }
+
+    s->pkt   = av_packet_alloc();
+    s->frame = av_frame_alloc();
+    if (!s->pkt || !s->frame) { ret = AVERROR(ENOMEM); goto fail_noavio; }
+
+    s->active = 1;
+    return slot;
+
+fail_noavio:
+    avformat_close_input(&s->fmt_ctx);
     av_packet_free(&s->pkt);
     av_frame_free(&s->frame);
     avcodec_free_context(&s->codec_ctx);
