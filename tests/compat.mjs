@@ -20,8 +20,8 @@ const ROOT        = path.resolve(import.meta.dirname, '..');
 const SAMPLES_DIR = process.env.FATE_SAMPLES ?? path.join(ROOT, 'fate-suite');
 const FATE_DIR    = path.join(ROOT, 'vendor/ffmpeg/tests/fate');
 const RESULTS_DIR = path.join(ROOT, 'tests/results');
-const wasmJs      = path.join(ROOT, 'dist/cpu.js');
-const wasmBin     = path.join(ROOT, 'dist/cpu.wasm');
+const wasmJs      = path.join(ROOT, 'dist/gpl-cpu.js');
+const wasmBin     = path.join(ROOT, 'dist/gpl-cpu.wasm');
 
 // ── worker: decode a chunk of tests ──────────────────────────────────────────
 
@@ -103,7 +103,7 @@ if (!isMainThread) {
 // ── main: load tests, split across workers ────────────────────────────────────
 
 if (!fs.existsSync(wasmJs)) {
-    console.error('dist/cpu.js not found — run: TARGET=cpu bash scripts/build.sh');
+    console.error('dist/gpl-cpu.js not found — run: PRESET=gpl TARGET=cpu bash scripts/build.sh');
     process.exit(1);
 }
 
