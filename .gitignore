@@ -2,6 +2,10 @@
 dist/
 build-cpu/
 build-webgpu/
+build-gpl-cpu/
+build-gpl-webgpu/
+configure-gpl-cpu.sh
+configure-gpl-webgpu.sh
 
 # dependencies
 node_modules/
