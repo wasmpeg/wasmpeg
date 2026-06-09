@@ -283,7 +283,8 @@ async function main() {
 
     for (const t of targets) {
         const webgpu     = t === 'webgpu';
-        const prefix     = path.join(ROOT, `build-${t}`);
+        const buildSuffix = p.gpl ? '-gpl' : '';
+        const prefix      = path.join(ROOT, `build${buildSuffix}-${t}`);
         const flags      = buildFlags(preset, webgpu);
         const scriptName = `configure-${t}.sh`;
         const script     = path.join(ROOT, scriptName);
