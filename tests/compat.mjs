@@ -70,11 +70,19 @@ if (!isMainThread) {
         const channels = cc('audio_channels', 'number', ['number'], [handle]);
         const cap      = 4096 * Math.max(channels, 1);
         const buf      = mod._malloc(cap * 4);
+        let decoded    = 0;
 
         for (;;) {
             const r = cc('audio_next_samples', 'number', ['number','number','number'], [handle, buf, cap]);
             if (r === 1) break;
-            if (r < 0) { mod._free(buf); cc('audio_close', null, ['number'], [handle]); throw new Error(`next_samples: ${r}`); }
+            if (r < 0) {
+                mod._free(buf); cc('audio_close', null, ['number'], [handle]);
+                // AVERROR_INVALIDDATA on a truncated trailing packet is a soft-EOF when
+                // some samples were already decoded (small FATE sample files).
+                if (r === -1094995529 && decoded > 0) return;
+                throw new Error(`next_samples: ${r}`);
+            }
+            decoded += r;
         }
 
         mod._free(buf);
