@@ -42,19 +42,21 @@ const PRESETS = {
             // classic / broadcast video
             'mpeg1video', 'mpeg2video', 'mpeg4', 'h263', 'h261',
             // Microsoft
-            'msmpeg4v1', 'msmpeg4v2', 'msmpeg4v3', 'wmv1', 'wmv2', 'wmv3', 'vc1',
+            'msmpeg4v1', 'msmpeg4v2', 'msmpeg4v3', 'wmv1', 'wmv2', 'wmv3', 'vc1', 'mss2',
             // Apple
             'prores', 'qtrle', 'svq1', 'svq3',
-            // professional
-            'dnxhd', 'mjpeg', 'mjpegb',
+            // professional / broadcast
+            'dnxhd', 'mjpeg', 'mjpegb', 'cfhd',
             // lossless / archival
-            'huffyuv', 'ffv1', 'ffvhuff', 'utvideo',
+            'huffyuv', 'ffv1', 'ffvhuff', 'utvideo', 'magicyuv', 'lagarith', 'hap',
+            // Bink (game video/audio)
+            'bink', 'binkaudio_dct', 'binkaudio_rdft',
             // legacy
             'theora', 'vp3', 'vp6f', 'vp7', 'rv10', 'rv20', 'rv30', 'rv40',
             'flashsv', 'flashsv2', 'cinepak', 'msvideo1',
             // images
             'png', 'gif', 'bmp', 'tiff', 'webp', 'tga', 'dpx', 'xbm',
-            'jpeg2000', 'jpegls',
+            'jpeg2000', 'jpegls', 'exr', 'psd',
             // modern audio
             'aac', 'aac_latm', 'opus', 'mp3', 'mp2', 'mp1', 'vorbis', 'flac',
             // surround / professional audio
@@ -63,12 +65,17 @@ const PRESETS = {
             'alac', 'wavpack', 'ape', 'tta', 'shorten',
             // Microsoft audio
             'wmav1', 'wmav2', 'wmapro', 'wmalossless',
-            // PCM variants
-            'pcm_s8', 'pcm_s16le', 'pcm_s16be', 'pcm_s24le', 'pcm_s32le',
-            'pcm_f32le', 'pcm_f64le', 'pcm_mulaw', 'pcm_alaw', 'pcm_dvd',
+            // PCM — all signed/unsigned/float variants
+            'pcm_s8', 'pcm_u8',
+            'pcm_s16le', 'pcm_s16be', 'pcm_u16le', 'pcm_u16be',
+            'pcm_s24le', 'pcm_s24be', 'pcm_u24le', 'pcm_u24be',
+            'pcm_s32le', 'pcm_s32be', 'pcm_u32le', 'pcm_u32be',
+            'pcm_f32le', 'pcm_f32be', 'pcm_f64le', 'pcm_f64be',
+            'pcm_mulaw', 'pcm_alaw', 'pcm_dvd', 'pcm_bluray', 'pcm_vidc',
             // ADPCM
             'adpcm_ms', 'adpcm_ima_wav', 'adpcm_ima_qt',
             'adpcm_swf', 'adpcm_yamaha', 'adpcm_thp',
+            'adpcm_g726', 'adpcm_g726le', 'adpcm_g722',
             // other audio
             'speex', 'nellymoser', 'amrnb', 'amrwb',
             'g722', 'g723_1', 'g726', 'gsm', 'gsm_ms',
@@ -85,18 +92,33 @@ const PRESETS = {
         ],
         demuxers: [
             // major containers
-            'mov', 'matroska', 'avi', 'ogg', 'asf', 'flv', 'rm',
+            'mov', 'matroska', 'avi', 'ogg', 'asf', 'flv', 'rm', 'mxf',
             // audio containers
             'mp3', 'wav', 'flac', 'aac', 'ac3', 'dts', 'truehd', 'mlp',
             'amr', 'g722', 'g726', 'gsm',
+            // lossless audio containers (decoders were already in; demuxers were missing)
+            'wv', 'ape',
+            // Bink
+            'bink', 'binka',
             // raw bitstreams
-            'h264', 'hevc', 'vp8', 'vp9', 'av1',
+            'h264', 'hevc', 'vp8', 'vp9', 'av1', 'ivf',
             'mpeg', 'mpegvideo', 'mpegts', 'rawvideo', 'm4v',
-            // image sequences
-            'image2', 'image2pipe', 'image_png_pipe',
+            // image pipes — one per format, needed for auto-detection of bare image files
+            'image2', 'image2pipe',
+            'image_png_pipe', 'image_bmp_pipe', 'image_gif_pipe',
+            'image_tiff_pipe', 'image_webp_pipe',
+            'image_j2k_pipe', 'image_jpeg_pipe', 'image_jpegls_pipe',
+            'image_exr_pipe', 'image_psd_pipe',
+            'image_dpx_pipe', 'image_tga_pipe',
+            // PCM raw — covers all signed/unsigned/float variants used in FATE
+            'pcm_s8', 'pcm_u8',
+            'pcm_s16le', 'pcm_s16be', 'pcm_u16le', 'pcm_u16be',
+            'pcm_s24le', 'pcm_s24be', 'pcm_u24le', 'pcm_u24be',
+            'pcm_s32le', 'pcm_s32be', 'pcm_u32le', 'pcm_u32be',
+            'pcm_f32le', 'pcm_f32be', 'pcm_f64le', 'pcm_f64be',
+            'pcm_mulaw', 'pcm_alaw', 'pcm_vidc',
             // other
-            'concat', 'wtv', 'pcm_s16le', 'pcm_s16be', 'pcm_f32le',
-            'pcm_mulaw', 'pcm_alaw',
+            'concat', 'wtv',
         ],
         muxers: [
             'mp4', 'webm', 'ogg', 'matroska', 'avi', 'flv', 'asf',
@@ -106,9 +128,9 @@ const PRESETS = {
         ],
         parsers: [
             'h264', 'hevc', 'vp8', 'vp9', 'av1',
-            'mpeg4video', 'h263', 'vc1', 'dvbsub', 'dvdsub',
+            'mpeg4video', 'mpegvideo', 'h263', 'vc1', 'dvbsub', 'dvdsub',
             'aac', 'aac_latm', 'ac3', 'dca', 'flac', 'opus',
-            'mpegaudio', 'png',
+            'mpegaudio', 'png', 'gif', 'bmp',
         ],
         protocols: ['file'],
         filters: [
