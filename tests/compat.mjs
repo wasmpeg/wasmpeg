@@ -130,7 +130,7 @@ function guessCodec(name, samplePath) {
         'h264','hevc','vp8','vp9','av1',
         'mpeg1','mpeg2','mpeg4','h263',
         'wmv1','wmv2','wmv3','vc1',
-        'prores','dnxhd','mjpeg','huffyuv','ffv1',
+        'canopus','prores','dnxhd','mjpeg','huffyuv','ffv1',
         'theora','vp3','vp6','vp7',
         'aac','opus','mp3','mp2','vorbis','flac',
         'ac3','eac3','dts','truehd','alac',
