@@ -26,6 +26,12 @@ vendor/ffmpeg/config_components.h
 # local-only dev tools (browser testing deferred; see docs)
 tests/browser-test.html
 
+# fate test samples (local only, rsynced on demand)
+fate-suite/
+
+# Claude Code session data
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db
