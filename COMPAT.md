@@ -1,8 +1,8 @@
 # FATE Compatibility
 
-Last run: **2026-06-09** · commit `d4e8e10be2` · WASM **5010 KB**
+Last run: **2026-06-09** · commit `8594de1b79` · WASM **5774 KB**
 
-## Overall: 453/1216 (37.3%)
+## Overall: 507/1216 (41.7%)
 
 | Codec | Type | Pass | Total | Rate |
 |-------|------|-----:|------:|-----:|
@@ -25,16 +25,16 @@ Last run: **2026-06-09** · commit `d4e8e10be2` · WASM **5010 KB**
 | mjpeg | video | 2 | 5 | 40.0% |
 | mp3 | video | 1 | 2 | 50.0% |
 | mpeg2 | video | 3 | 17 | 17.6% |
-| mpeg4 | video | 7 | 8 | 87.5% |
+| mpeg4 | video | 8 | 8 | 100.0% |
 | opus | video | 1 | 1 | 100.0% |
-| other | video | 43 | 555 | 7.7% |
+| other | video | 95 | 555 | 17.1% |
 | pcm | video | 0 | 60 | 0.0% |
 | png | video | 9 | 10 | 90.0% |
 | prores | video | 12 | 12 | 100.0% |
 | theora | video | 2 | 3 | 66.7% |
 | tiff | video | 0 | 8 | 0.0% |
 | truehd | video | 0 | 5 | 0.0% |
-| vc1 | video | 1 | 11 | 9.1% |
+| vc1 | video | 2 | 11 | 18.2% |
 | vorbis | audio | 21 | 23 | 91.3% |
 | vp3 | video | 1 | 1 | 100.0% |
 | vp6 | video | 3 | 8 | 37.5% |
