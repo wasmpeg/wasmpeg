@@ -1,8 +1,8 @@
 # FATE Compatibility
 
-Last run: **2026-06-09** · commit `0a318c4037` · WASM **6437 KB**
+Last run: **2026-06-09** · commit `cf711bd16b` · WASM **6439 KB**
 
-## Overall: 881/1242 (70.9%)
+## Overall: 885/1242 (71.3%)
 
 | Codec | Type | Pass | Total | Rate |
 |-------|------|-----:|------:|-----:|
@@ -20,15 +20,15 @@ Last run: **2026-06-09** · commit `0a318c4037` · WASM **6437 KB**
 | cinepak | video | 1 | 1 | 100.0% |
 | cook | audio | 1 | 1 | 100.0% |
 | dnxhd | video | 3 | 9 | 33.3% |
-| dolby_e | audio | 0 | 2 | 0.0% |
+| dolby_e | audio | 2 | 2 | 100.0% |
 | dpx | video | 2 | 2 | 100.0% |
 | dsf | audio | 0 | 1 | 0.0% |
-| dts | audio | 6 | 7 | 85.7% |
+| dts | video | 6 | 7 | 85.7% |
 | exr | video | 74 | 74 | 100.0% |
 | flac | video | 2 | 2 | 100.0% |
 | g722 | video | 1 | 1 | 100.0% |
 | g723 | video | 8 | 8 | 100.0% |
-| g728 | audio | 0 | 1 | 0.0% |
+| g728 | audio | 1 | 1 | 100.0% |
 | gif | video | 6 | 6 | 100.0% |
 | gsm | video | 2 | 2 | 100.0% |
 | h264 | video | 209 | 212 | 98.6% |
@@ -58,7 +58,7 @@ Last run: **2026-06-09** · commit `0a318c4037` · WASM **6437 KB**
 | qtrle | video | 9 | 9 | 100.0% |
 | ra_288 | audio | 1 | 1 | 100.0% |
 | ra4 | audio | 1 | 1 | 100.0% |
-| shorten | video | 0 | 1 | 0.0% |
+| shorten | video | 1 | 1 | 100.0% |
 | sipr | audio | 4 | 4 | 100.0% |
 | svq1 | video | 2 | 2 | 100.0% |
 | svq3 | video | 3 | 3 | 100.0% |
