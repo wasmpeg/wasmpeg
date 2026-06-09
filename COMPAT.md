@@ -1,20 +1,20 @@
 # FATE Compatibility
 
-Last run: **2026-06-09** · commit `f5a45da933` · WASM **5943 KB**
+Last run: **2026-06-09** · commit `40fa5833b3` · WASM **6100 KB**
 
-## Overall: 770/1216 (63.3%)
+## Overall: 826/1216 (67.9%)
 
 | Codec | Type | Pass | Total | Rate |
 |-------|------|-----:|------:|-----:|
-| aac | audio | 91 | 94 | 96.8% |
-| ac3 | audio | 12 | 26 | 46.2% |
+| aac | audio | 93 | 94 | 98.9% |
+| ac3 | audio | 21 | 26 | 80.8% |
 | alac | video | 1 | 1 | 100.0% |
-| amr | audio | 12 | 18 | 66.7% |
-| ape | video | 1 | 5 | 20.0% |
+| amr | audio | 18 | 18 | 100.0% |
+| ape | video | 3 | 5 | 60.0% |
 | av1 | video | 0 | 1 | 0.0% |
 | bink | video | 3 | 5 | 60.0% |
 | bmp | video | 14 | 14 | 100.0% |
-| canopus | video | 0 | 8 | 0.0% |
+| canopus | video | 3 | 8 | 37.5% |
 | cfhd | video | 3 | 3 | 100.0% |
 | cinepak | video | 1 | 1 | 100.0% |
 | dnxhd | video | 3 | 9 | 33.3% |
@@ -22,8 +22,8 @@ Last run: **2026-06-09** · commit `f5a45da933` · WASM **5943 KB**
 | dts | video | 6 | 7 | 85.7% |
 | exr | video | 74 | 74 | 100.0% |
 | flac | video | 2 | 2 | 100.0% |
-| g722 | video | 0 | 1 | 0.0% |
-| g723 | video | 0 | 8 | 0.0% |
+| g722 | video | 1 | 1 | 100.0% |
+| g723 | video | 8 | 8 | 100.0% |
 | gif | video | 6 | 6 | 100.0% |
 | gsm | video | 2 | 2 | 100.0% |
 | h264 | video | 209 | 212 | 98.6% |
@@ -34,18 +34,19 @@ Last run: **2026-06-09** · commit `f5a45da933` · WASM **5943 KB**
 | lagarith | video | 9 | 9 | 100.0% |
 | magicyuv | video | 7 | 7 | 100.0% |
 | mjpeg | video | 2 | 5 | 40.0% |
-| mp3 | video | 1 | 2 | 50.0% |
-| mpeg2 | video | 3 | 17 | 17.6% |
+| mp3 | video | 2 | 2 | 100.0% |
+| mpeg2 | video | 4 | 17 | 23.5% |
 | mpeg4 | video | 8 | 8 | 100.0% |
 | mss2 | video | 6 | 6 | 100.0% |
 | msvideo1 | video | 2 | 2 | 100.0% |
 | nellymoser | audio | 1 | 1 | 100.0% |
 | opus | video | 1 | 1 | 100.0% |
-| other | video | 82 | 365 | 22.5% |
+| other | video | 92 | 364 | 25.3% |
 | pcm | video | 7 | 60 | 11.7% |
 | png | video | 9 | 10 | 90.0% |
 | prores | video | 12 | 12 | 100.0% |
 | psd | video | 7 | 7 | 100.0% |
+| qdm2 | audio | 1 | 1 | 100.0% |
 | qtrle | video | 9 | 9 | 100.0% |
 | shorten | video | 0 | 1 | 0.0% |
 | sipr | audio | 4 | 4 | 100.0% |
@@ -56,17 +57,17 @@ Last run: **2026-06-09** · commit `f5a45da933` · WASM **5943 KB**
 | tiff | video | 5 | 8 | 62.5% |
 | truehd | video | 2 | 5 | 40.0% |
 | utvideo | video | 23 | 23 | 100.0% |
-| vc1 | video | 2 | 11 | 18.2% |
+| vc1 | video | 4 | 11 | 36.4% |
 | vorbis | audio | 23 | 23 | 100.0% |
 | vp3 | video | 1 | 1 | 100.0% |
-| vp6 | video | 3 | 8 | 37.5% |
+| vp6 | video | 8 | 8 | 100.0% |
 | vp7 | video | 2 | 2 | 100.0% |
 | vp8 | video | 4 | 4 | 100.0% |
 | vp9 | video | 3 | 3 | 100.0% |
 | wavpack | video | 30 | 30 | 100.0% |
 | webp | video | 7 | 7 | 100.0% |
-| wmapro | audio | 0 | 2 | 0.0% |
-| wmav | audio | 0 | 3 | 0.0% |
+| wmapro | audio | 2 | 2 | 100.0% |
+| wmav | audio | 3 | 3 | 100.0% |
 | wmv3 | video | 0 | 2 | 0.0% |
 
 ---
