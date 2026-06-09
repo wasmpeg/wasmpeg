@@ -1,8 +1,8 @@
 # FATE Compatibility
 
-Last run: **2026-06-09** · commit `cf711bd16b` · WASM **6439 KB**
+Last run: **2026-06-09** · commit `1244d44977` · WASM **6597 KB**
 
-## Overall: 885/1242 (71.3%)
+## Overall: 890/1242 (71.7%)
 
 | Codec | Type | Pass | Total | Rate |
 |-------|------|-----:|------:|-----:|
@@ -15,7 +15,7 @@ Last run: **2026-06-09** · commit `cf711bd16b` · WASM **6439 KB**
 | av1 | video | 0 | 1 | 0.0% |
 | bink | audio | 4 | 6 | 66.7% |
 | bmp | video | 14 | 14 | 100.0% |
-| canopus | video | 3 | 8 | 37.5% |
+| canopus | video | 8 | 8 | 100.0% |
 | cfhd | video | 3 | 3 | 100.0% |
 | cinepak | video | 1 | 1 | 100.0% |
 | cook | audio | 1 | 1 | 100.0% |
