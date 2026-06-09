@@ -43,17 +43,18 @@ const PRESETS = {
             'mpeg1video', 'mpeg2video', 'mpeg4', 'h263', 'h261',
             // Microsoft
             'msmpeg4v1', 'msmpeg4v2', 'msmpeg4v3', 'wmv1', 'wmv2', 'wmv3', 'vc1', 'mss2',
-            // Apple
-            'prores', 'qtrle', 'svq1', 'svq3',
+            // Apple / QuickTime
+            'prores', 'qtrle', 'svq1', 'svq3', 'qdm2',
             // professional / broadcast
             'dnxhd', 'mjpeg', 'mjpegb', 'cfhd',
             // lossless / archival
             'huffyuv', 'ffv1', 'ffvhuff', 'utvideo', 'magicyuv', 'lagarith', 'hap',
             // Bink (game video/audio)
             'bink', 'binkaudio_dct', 'binkaudio_rdft',
-            // legacy
+            // legacy / game
             'theora', 'vp3', 'vp6f', 'vp7', 'rv10', 'rv20', 'rv30', 'rv40',
             'flashsv', 'flashsv2', 'cinepak', 'msvideo1',
+            'fraps', 'cdxl', 'flic', 'zmbv', 'cllc',
             // images
             'png', 'gif', 'bmp', 'tiff', 'webp', 'tga', 'dpx', 'xbm',
             'jpeg2000', 'jpegls', 'exr', 'psd',
@@ -64,7 +65,7 @@ const PRESETS = {
             // lossless audio
             'alac', 'wavpack', 'ape', 'tta', 'shorten',
             // Microsoft audio
-            'wmav1', 'wmav2', 'wmapro', 'wmalossless',
+            'wmav1', 'wmav2', 'wmapro', 'wmalossless', 'wmavoice',
             // PCM — all signed/unsigned/float variants
             'pcm_s8', 'pcm_u8',
             'pcm_s16le', 'pcm_s16be', 'pcm_u16le', 'pcm_u16be',
@@ -100,9 +101,13 @@ const PRESETS = {
             'wv', 'ape',
             // Bink
             'bink', 'binka',
-            // raw bitstreams
-            'h264', 'hevc', 'vp8', 'vp9', 'av1', 'ivf',
-            'mpeg', 'mpegvideo', 'mpegts', 'rawvideo', 'm4v',
+            // CDXL (Amiga)
+            'cdxl',
+            // g723.1 audio
+            'g723_1',
+            // raw bitstreams — note: vp8/vp9 raw uses ivf, mpeg PS = mpegps not mpeg
+            'h264', 'hevc', 'av1', 'ivf',
+            'mpegps', 'mpegvideo', 'mpegts', 'rawvideo',
             // image pipes — one per format, needed for auto-detection of bare image files
             'image2', 'image2pipe',
             'image_png_pipe', 'image_bmp_pipe', 'image_gif_pipe',

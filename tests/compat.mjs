@@ -139,8 +139,8 @@ function guessCodec(name, samplePath) {
         'mpeg1','mpeg2','mpeg4','h263','h261',
         // video — Microsoft
         'wmv1','wmv2','wmv3','vc1','mss2',
-        // video — Apple / professional
-        'canopus','prores','dnxhd','mjpeg','qtrle','svq1','svq3','cfhd',
+        // video — Apple / professional / Canopus (decoder=cllc)
+        'canopus','cllc','prores','dnxhd','mjpeg','qtrle','svq1','svq3','cfhd','qdm2',
         // video — lossless / archival
         'huffyuv','ffv1','magicyuv','lagarith','hap','utvideo',
         // video — Bink
