@@ -93,7 +93,18 @@ if (!isMainThread) {
     const EXT_FMT = {
         g722: 'g722', '722': 'g722',
         tco: 'g723_1', rco: 'g723_1', g723_1: 'g723_1',
+        // other extension-only audio containers
+        adp: 'adp', aea: 'aea', apc: 'apc', apm: 'apm',
+        brstm: 'brstm', bfstm: 'bfstm', bcstm: 'bcstm',
+        iss: 'iss', rsd: 'rsd', sol: 'sol',
+        vag: 'kvag', xa: 'xa',
+        '5c': 'pp_bnk', '11c': 'pp_bnk', '44c': 'pp_bnk',
+        pcm: 'alp', tun: 'alp',
+        znm: 'smush', vqf: 'vqf',
+        qcp: 'qcp', xwma: 'xwma',
     };
+    // extensions that are always video even if probe_width is 0
+    const EXT_VIDEO = new Set(['dnxhr','rcv']);
 
     const byCodec = {};
 
@@ -110,8 +121,9 @@ if (!isMainThread) {
             const ptr = alloc(bytes);
             const ph  = cc('probe_open', 'number', ['number','number'], [ptr, bytes.byteLength]);
             mod._free(ptr);
-            const hasVideo = ph >= 0 && cc('probe_width',  'number', ['number'], [ph]) > 0;
+            const probeWidth = ph >= 0 ? cc('probe_width', 'number', ['number'], [ph]) : -1;
             if (ph >= 0) cc('probe_close', null, ['number'], [ph]);
+            const hasVideo = probeWidth > 0 || EXT_VIDEO.has(ext);
 
             if (hasVideo)   decodeVideo(bytes);
             else            decodeAudio(bytes, fmtHint);
@@ -142,6 +154,8 @@ function classifyCmd(cmd) {
     const macro = cmd.trim().split(/\s+/)[0];
     if (['framecrc','framemd5','md5','md5pipe'].includes(macro)) return 'video';
     if (['pcm','enc_dec_pcm','audio_match'].includes(macro))     return 'audio';
+    // crc tests just verify a container/stream opens correctly — route as decode
+    if (macro === 'crc') return 'audio';
     return null;
 }
 
@@ -179,6 +193,9 @@ function guessCodec(name, samplePath) {
         // audio — PCM / ADPCM
         'pcm','adpcm','amr','speex','gsm',
         'g722','g723','g726','sipr','nellymoser',
+        // audio — game / multimedia
+        'dpcm','atrac','wmavoice','imc','truespeech','musepack','twinvq',
+        'qcelp','ra4','ra_288','cook','dolby_e','dsf','g728',
     ];
     const haystack = (name + ' ' + samplePath).toLowerCase();
     for (const c of knownCodecs) if (haystack.includes(c)) return c;
