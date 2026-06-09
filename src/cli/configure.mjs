@@ -54,7 +54,7 @@ const PRESETS = {
             // legacy / game
             'theora', 'vp3', 'vp6', 'vp6a', 'vp6f', 'vp7', 'rv10', 'rv20', 'rv30', 'rv40',
             'flashsv', 'flashsv2', 'cinepak', 'msvideo1',
-            'fraps', 'cdxl', 'flic', 'zmbv', 'cllc',
+            'fraps', 'cdxl', 'flic', 'zmbv', 'cllc', 'hq_hqa', 'hqx', 'speedhq',
             // images
             'png', 'gif', 'bmp', 'tiff', 'webp', 'tga', 'dpx', 'xbm',
             'jpeg2000', 'jpegls', 'exr', 'psd',
