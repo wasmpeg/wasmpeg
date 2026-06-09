@@ -1,0 +1,284 @@
+#!/usr/bin/env node
+/**
+ * compat.mjs — FATE compatibility tracker for wasmpeg.
+ *
+ * Runs the full FATE execution suite in parallel (one WASM instance per core),
+ * collects per-codec pass rates, and writes a JSON snapshot + COMPAT.md.
+ *
+ * Usage:
+ *   node tests/compat.mjs [--filter=h264] [--no-save] [--workers=N]
+ *   FATE_SAMPLES=/path/to/fate-suite node tests/compat.mjs
+ */
+
+import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
+import os   from 'node:os';
+import fs   from 'node:fs';
+import path from 'node:path';
+import { execSync, spawnSync } from 'node:child_process';
+
+const ROOT        = path.resolve(import.meta.dirname, '..');
+const SAMPLES_DIR = process.env.FATE_SAMPLES ?? path.join(ROOT, 'fate-suite');
+const FATE_DIR    = path.join(ROOT, 'vendor/ffmpeg/tests/fate');
+const RESULTS_DIR = path.join(ROOT, 'tests/results');
+const wasmJs      = path.join(ROOT, 'dist/cpu.js');
+const wasmBin     = path.join(ROOT, 'dist/cpu.wasm');
+
+// ── worker: decode a chunk of tests ──────────────────────────────────────────
+
+if (!isMainThread) {
+    const { tests } = workerData;
+
+    const { default: factory } = await import(wasmJs);
+    const mod = await factory({ wasmBinary: fs.readFileSync(wasmBin) });
+
+    function cc(fn, ret, types, args) { return mod.ccall(fn, ret, types, args); }
+
+    function alloc(bytes) {
+        const ptr = mod._malloc(bytes.byteLength);
+        mod.HEAPU8.set(bytes, ptr);
+        return ptr;
+    }
+
+    function decodeVideo(bytes) {
+        const ptr    = alloc(bytes);
+        const handle = cc('decoder_open', 'number', ['number','number'], [ptr, bytes.byteLength]);
+        mod._free(ptr);
+        if (handle < 0) throw new Error(`decoder_open: ${handle}`);
+
+        const w   = cc('decoder_width',  'number', ['number'], [handle]);
+        const h   = cc('decoder_height', 'number', ['number'], [handle]);
+        const buf = mod._malloc(w * h * 4);
+
+        for (;;) {
+            const r = cc('decoder_next_frame', 'number', ['number','number','number','number'], [handle, buf, w, h]);
+            if (r === 1) break;
+            if (r < 0) { mod._free(buf); cc('decoder_close', null, ['number'], [handle]); throw new Error(`next_frame: ${r}`); }
+        }
+
+        mod._free(buf);
+        cc('decoder_close', null, ['number'], [handle]);
+    }
+
+    function decodeAudio(bytes) {
+        const ptr    = alloc(bytes);
+        const handle = cc('audio_open', 'number', ['number','number'], [ptr, bytes.byteLength]);
+        mod._free(ptr);
+        if (handle < 0) throw new Error(`audio_open: ${handle}`);
+
+        const channels = cc('audio_channels', 'number', ['number'], [handle]);
+        const cap      = 4096 * Math.max(channels, 1);
+        const buf      = mod._malloc(cap * 4);
+
+        for (;;) {
+            const r = cc('audio_next_samples', 'number', ['number','number','number'], [handle, buf, cap]);
+            if (r === 1) break;
+            if (r < 0) { mod._free(buf); cc('audio_close', null, ['number'], [handle]); throw new Error(`next_samples: ${r}`); }
+        }
+
+        mod._free(buf);
+        cc('audio_close', null, ['number'], [handle]);
+    }
+
+    const byCodec = {};
+
+    for (const t of tests) {
+        const bytes = new Uint8Array(fs.readFileSync(t.localPath));
+        byCodec[t.codec] ??= { pass: 0, total: 0, type: t.type };
+        byCodec[t.codec].total++;
+
+        try {
+            if (t.type === 'video') decodeVideo(bytes);
+            else                    decodeAudio(bytes);
+            byCodec[t.codec].pass++;
+            parentPort.postMessage({ type: 'tick', ok: true });
+        } catch {
+            parentPort.postMessage({ type: 'tick', ok: false });
+        }
+    }
+
+    parentPort.postMessage({ type: 'done', byCodec });
+    process.exit(0);
+}
+
+// ── main: load tests, split across workers ────────────────────────────────────
+
+if (!fs.existsSync(wasmJs)) {
+    console.error('dist/cpu.js not found — run: TARGET=cpu bash scripts/build.sh');
+    process.exit(1);
+}
+
+const NO_SAVE    = process.argv.includes('--no-save');
+const FILTER_ARG = process.argv.find(a => a.startsWith('--filter='))?.split('=')[1];
+const NWORKERS   = parseInt(process.argv.find(a => a.startsWith('--workers='))?.split('=')[1])
+
+                || os.availableParallelism?.() || os.cpus().length;
+
+function classifyCmd(cmd) {
+    const macro = cmd.trim().split(/\s+/)[0];
+    if (['framecrc','framemd5','md5','md5pipe'].includes(macro)) return 'video';
+    if (['pcm','enc_dec_pcm','audio_match'].includes(macro))     return 'audio';
+    return null;
+}
+
+function parseSamplePath(cmd) {
+    const m = cmd.match(/\$\(TARGET_SAMPLES\)\/([^\s)]+)/);
+    return m ? m[1] : null;
+}
+
+function guessCodec(name, samplePath) {
+    const knownCodecs = [
+        'h264','hevc','vp8','vp9','av1',
+        'mpeg1','mpeg2','mpeg4','h263',
+        'wmv1','wmv2','wmv3','vc1',
+        'prores','dnxhd','mjpeg','huffyuv','ffv1',
+        'theora','vp3','vp6','vp7',
+        'aac','opus','mp3','mp2','vorbis','flac',
+        'ac3','eac3','dts','truehd','alac',
+        'wmav','wavpack','ape',
+        'pcm','adpcm','amr','speex','gsm',
+        'gif','png','bmp','tiff','jpeg2000','webp',
+    ];
+    const haystack = (name + ' ' + samplePath).toLowerCase();
+    for (const c of knownCodecs) if (haystack.includes(c)) return c;
+    return 'other';
+}
+
+function loadTests() {
+    const tests = [];
+    for (const mak of fs.readdirSync(FATE_DIR).filter(f => f.endsWith('.mak'))) {
+        const text  = fs.readFileSync(path.join(FATE_DIR, mak), 'utf8');
+        const lines = text.replace(/\\\n/g, ' ').split('\n');
+        let lastName = null;
+        for (const line of lines) {
+            const nm = line.match(/^(fate-[\w-]+)\s*:/);
+            if (nm) lastName = nm[1];
+            const cm = line.match(/CMD\s*=\s*(.+)/);
+            if (!cm) continue;
+            const cmd        = cm[1].trim();
+            const type       = classifyCmd(cmd);
+            const samplePath = parseSamplePath(cmd);
+            if (!type || !samplePath) continue;
+            const localPath = path.join(SAMPLES_DIR, samplePath);
+            if (!fs.existsSync(localPath)) continue;
+            if (FILTER_ARG && !samplePath.includes(FILTER_ARG) && !(lastName ?? '').includes(FILTER_ARG)) continue;
+            tests.push({ name: lastName ?? samplePath, samplePath, localPath, type, codec: guessCodec(lastName ?? '', samplePath) });
+        }
+    }
+    return tests;
+}
+
+function chunkArray(arr, n) {
+    const chunks = Array.from({ length: n }, () => []);
+    arr.forEach((item, i) => chunks[i % n].push(item));
+    return chunks.filter(c => c.length > 0);
+}
+
+// ── rsync fate-suite ──────────────────────────────────────────────────────────
+
+console.log('syncing fate-suite...');
+const rsync = spawnSync('rsync', ['-a', '--delete', 'rsync://fate-suite.ffmpeg.org/fate-suite/', SAMPLES_DIR + '/'], { stdio: 'inherit' });
+if (rsync.status !== 0) { console.error('rsync failed'); process.exit(1); }
+console.log('');
+
+// ── run workers ───────────────────────────────────────────────────────────────
+
+const tests  = loadTests();
+const chunks = chunkArray(tests, NWORKERS);
+
+console.log(`\nfate compat — ${tests.length} tests · ${chunks.length} workers\n`);
+
+let done = 0, totalPass = 0, totalFail = 0;
+const byCodec = {};
+
+await new Promise((resolve, reject) => {
+    let finished = 0;
+
+    for (const chunk of chunks) {
+        const w = new Worker(new URL(import.meta.url), { workerData: { tests: chunk } });
+
+        w.on('message', msg => {
+            if (msg.type === 'tick') {
+                done++;
+                msg.ok ? totalPass++ : totalFail++;
+                process.stdout.write(`\r  ${done}/${tests.length}  (${((totalPass / done) * 100).toFixed(1)}% passing)`);
+            } else if (msg.type === 'done') {
+                for (const [codec, { pass, total, type }] of Object.entries(msg.byCodec)) {
+                    byCodec[codec] ??= { pass: 0, total: 0, type };
+                    byCodec[codec].pass  += pass;
+                    byCodec[codec].total += total;
+                }
+                if (++finished === chunks.length) resolve();
+            }
+        });
+
+        w.on('error', reject);
+    }
+});
+
+process.stdout.write('\n\n');
+
+// ── snapshot ──────────────────────────────────────────────────────────────────
+
+let sha = 'unknown';
+try { sha = execSync('git rev-parse --short HEAD', { cwd: ROOT }).toString().trim(); } catch {}
+
+const wasmKb = Math.round(fs.statSync(wasmBin).size / 1024);
+
+const snapshot = {
+    date:   new Date().toISOString().slice(0, 10),
+    sha,
+    wasmKb,
+    total:  { pass: totalPass, fail: totalFail, pct: +((totalPass / (totalPass + totalFail)) * 100).toFixed(1) },
+    codecs: Object.fromEntries(
+        Object.entries(byCodec)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([codec, { pass, total, type }]) => [
+                codec, { pass, total, pct: +((pass / total) * 100).toFixed(1), type }
+            ])
+    ),
+};
+
+// ── render ────────────────────────────────────────────────────────────────────
+
+function renderTable(snap) {
+    const lines = [];
+    lines.push('# FATE Compatibility');
+    lines.push('');
+    lines.push(`Last run: **${snap.date}** · commit \`${snap.sha}\` · WASM **${snap.wasmKb} KB**`);
+    lines.push('');
+    lines.push(`## Overall: ${snap.total.pass}/${snap.total.pass + snap.total.fail} (${snap.total.pct}%)`);
+    lines.push('');
+    lines.push('| Codec | Type | Pass | Total | Rate |');
+    lines.push('|-------|------|-----:|------:|-----:|');
+    for (const [codec, { pass, total, pct, type }] of Object.entries(snap.codecs))
+        lines.push(`| ${codec} | ${type} | ${pass} | ${total} | ${pct.toFixed(1)}% |`);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+    lines.push('Generated by `node tests/compat.mjs`. Commit `tests/results/latest.json` and `COMPAT.md` to track progress over time.');
+    lines.push('');
+    return lines.join('\n');
+}
+
+console.log('─'.repeat(60));
+console.log(`  Overall: ${totalPass}/${totalPass + totalFail}  (${snapshot.total.pct}%)  — WASM ${wasmKb} KB`);
+console.log('─'.repeat(60));
+
+for (const [codec, { pass, total, pct }] of Object.entries(snapshot.codecs).sort(([,a],[,b]) => b.pct - a.pct))
+    console.log(`  ${codec.padEnd(12)} ${pct.toFixed(1).padStart(6)}%  (${pass}/${total})`);
+
+console.log('');
+
+if (!NO_SAVE) {
+    fs.mkdirSync(RESULTS_DIR, { recursive: true });
+    const fname = `${snapshot.date}-${sha}.json`;
+    fs.writeFileSync(path.join(RESULTS_DIR, fname),         JSON.stringify(snapshot, null, 2));
+    fs.writeFileSync(path.join(RESULTS_DIR, 'latest.json'), JSON.stringify(snapshot, null, 2));
+    fs.writeFileSync(path.join(ROOT, 'COMPAT.md'),          renderTable(snapshot));
+    console.log(`  Saved: tests/results/${fname}`);
+    console.log('  Updated: tests/results/latest.json');
+    console.log('  Updated: COMPAT.md');
+    console.log('');
+    console.log('  Commit both files to track progress over time:');
+    console.log(`    git add tests/results/latest.json COMPAT.md && git commit -s -m "compat: ${snapshot.date} — ${snapshot.total.pct}% (${totalPass}/${totalPass + totalFail})"`);
+}

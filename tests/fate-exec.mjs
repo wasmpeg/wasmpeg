@@ -1,120 +1,202 @@
 /**
- * fate-exec.mjs — execute FATE h264-conformance tests against our WASM decoder.
+ * fate-exec.mjs — execute FATE decode tests against our WASM pipeline.
  *
- * Loads the CPU WASM, opens each sample with gpu.createDecoder(), drains all frames,
- * and reports pass/fail. Does not compare checksums — tests pass if the decoder
- * opens and drains without throwing.
+ * Parses all FATE .mak files, finds framecrc/pcm tests where the sample
+ * file exists locally, then runs our video or audio decoder on each.
+ * Reports pass/fail + timing for benchmarking.
  *
  * Usage:
- *   node tests/fate-exec.mjs [--verbose] [--filter=BA1]
+ *   node tests/fate-exec.mjs [--verbose] [--filter=h264] [--limit=N]
  *   FATE_SAMPLES=/path/to/fate-suite node tests/fate-exec.mjs
  */
 
 import fs   from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
 const ROOT        = path.resolve(import.meta.dirname, '..');
-const SAMPLES_DIR = process.env.FATE_SAMPLES
-    ?? path.join(ROOT, 'fate-suite/h264-conformance/h264-conformance');
+const SAMPLES_DIR = process.env.FATE_SAMPLES ?? path.join(ROOT, 'fate-suite');
+const FATE_DIR    = path.join(ROOT, 'vendor/ffmpeg/tests/fate');
 const VERBOSE     = process.argv.includes('--verbose');
 const FILTER_ARG  = process.argv.find(a => a.startsWith('--filter='))?.split('=')[1];
+const LIMIT       = parseInt(process.argv.find(a => a.startsWith('--limit='))?.split('=')[1] ?? '0');
 
 // ── load WASM ─────────────────────────────────────────────────────────────────
 
-const wasmJs   = path.join(ROOT, 'dist/cpu.js');
-const wasmBin  = path.join(ROOT, 'dist/cpu.wasm');
+const wasmJs  = path.join(ROOT, 'dist/cpu.js');
+const wasmBin = path.join(ROOT, 'dist/cpu.wasm');
 
 if (!fs.existsSync(wasmJs)) {
     console.error('dist/cpu.js not found — run: TARGET=cpu bash scripts/build.sh');
-    process.exit(1);
-}
-if (!fs.existsSync(SAMPLES_DIR)) {
-    console.error(`samples not found at: ${SAMPLES_DIR}`);
-    console.error('run: rsync -av rsync://fate.ffmpeg.org/fate-suite/h264-conformance/ fate-suite/h264-conformance/');
     process.exit(1);
 }
 
 const { default: factory } = await import(wasmJs);
 const mod = await factory({ wasmBinary: fs.readFileSync(wasmBin) });
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// ── pipeline helpers ──────────────────────────────────────────────────────────
 
-function ccall(fn, ret, argTypes, args) {
-    return mod.ccall(fn, ret, argTypes, args);
+function cc(fn, ret, types, args) { return mod.ccall(fn, ret, types, args); }
+
+function alloc(bytes) {
+    const ptr = mod._malloc(bytes.byteLength);
+    mod.HEAPU8.set(bytes, ptr);
+    return ptr;
 }
 
-function decodeAll(fileBytes) {
-    const srcPtr = mod._malloc(fileBytes.byteLength);
-    mod.HEAPU8.set(fileBytes, srcPtr);
-    const handle = ccall('decoder_open', 'number', ['number','number'], [srcPtr, fileBytes.byteLength]);
-    mod._free(srcPtr);
+function decodeVideo(bytes) {
+    const ptr    = alloc(bytes);
+    const handle = cc('decoder_open', 'number', ['number','number'], [ptr, bytes.byteLength]);
+    mod._free(ptr);
     if (handle < 0) throw new Error(`decoder_open: ${handle}`);
 
-    const w = ccall('decoder_width',  'number', ['number'], [handle]);
-    const h = ccall('decoder_height', 'number', ['number'], [handle]);
-    const frameBuf = mod._malloc(w * h * 4);
+    const w = cc('decoder_width',  'number', ['number'], [handle]);
+    const h = cc('decoder_height', 'number', ['number'], [handle]);
+    const buf = mod._malloc(w * h * 4);
 
     let frames = 0;
+    const t0 = Date.now();
     for (;;) {
-        const ret = ccall('decoder_next_frame', 'number',
-            ['number','number','number','number'], [handle, frameBuf, w, h]);
-        if (ret === 1) break;   // EOF
-        if (ret < 0) { mod._free(frameBuf); ccall('decoder_close', null, ['number'], [handle]); throw new Error(`decoder_next_frame: ${ret}`); }
+        const r = cc('decoder_next_frame', 'number', ['number','number','number','number'], [handle, buf, w, h]);
+        if (r === 1) break;
+        if (r < 0) { mod._free(buf); cc('decoder_close', null, ['number'], [handle]); throw new Error(`next_frame: ${r}`); }
         frames++;
     }
+    const ms = Date.now() - t0;
 
-    mod._free(frameBuf);
-    ccall('decoder_close', null, ['number'], [handle]);
-    return frames;
+    mod._free(buf);
+    cc('decoder_close', null, ['number'], [handle]);
+    return { frames, ms, w, h };
 }
 
-// ── discover tests ────────────────────────────────────────────────────────────
+function decodeAudio(bytes) {
+    const ptr    = alloc(bytes);
+    const handle = cc('audio_open', 'number', ['number','number'], [ptr, bytes.byteLength]);
+    mod._free(ptr);
+    if (handle < 0) throw new Error(`audio_open: ${handle}`);
 
-const files = fs.readdirSync(SAMPLES_DIR)
-    .filter(f => /\.(264|jsv|h264|avc)$/i.test(f))
-    .filter(f => !FILTER_ARG || f.toLowerCase().includes(FILTER_ARG.toLowerCase()))
-    .sort();
+    const channels   = cc('audio_channels',    'number', ['number'], [handle]);
+    const sampleRate = cc('audio_sample_rate', 'number', ['number'], [handle]);
+    const cap        = 4096 * channels;
+    const buf        = mod._malloc(cap * 4);
+
+    let chunks = 0, totalSamples = 0;
+    const t0 = Date.now();
+    for (;;) {
+        const r = cc('audio_next_samples', 'number', ['number','number','number'], [handle, buf, cap]);
+        if (r === 1) break;
+        if (r < 0) { mod._free(buf); cc('audio_close', null, ['number'], [handle]); throw new Error(`next_samples: ${r}`); }
+        chunks++;
+        totalSamples += r;
+    }
+    const ms = Date.now() - t0;
+
+    mod._free(buf);
+    cc('audio_close', null, ['number'], [handle]);
+    return { chunks, totalSamples, sampleRate, channels, ms };
+}
+
+// ── FATE .mak parser ──────────────────────────────────────────────────────────
+
+// Determine whether a CMD is a video decode, audio decode, or skip.
+function classifyCmd(cmd) {
+    const macro = cmd.trim().split(/\s+/)[0];
+    if (['framecrc','framemd5','md5','md5pipe'].includes(macro)) return 'video';
+    if (['pcm','enc_dec_pcm','audio_match'].includes(macro))     return 'audio';
+    return null;
+}
+
+function parseSamplePath(cmd) {
+    const m = cmd.match(/\$\(TARGET_SAMPLES\)\/([^\s)]+)/);
+    return m ? m[1] : null;
+}
+
+function loadTests() {
+    const tests = [];
+    for (const mak of fs.readdirSync(FATE_DIR).filter(f => f.endsWith('.mak'))) {
+        const text  = fs.readFileSync(path.join(FATE_DIR, mak), 'utf8');
+        const lines = text.replace(/\\\n/g, ' ').split('\n');
+        let lastName = null;
+        for (const line of lines) {
+            const nm = line.match(/^(fate-[\w-]+)\s*:/);
+            if (nm) lastName = nm[1];
+            const cm = line.match(/CMD\s*=\s*(.+)/);
+            if (!cm) continue;
+            const cmd        = cm[1].trim();
+            const type       = classifyCmd(cmd);
+            const samplePath = parseSamplePath(cmd);
+            if (!type || !samplePath) continue;
+            const localPath = path.join(SAMPLES_DIR, samplePath);
+            if (!fs.existsSync(localPath)) continue;
+            if (FILTER_ARG && !samplePath.includes(FILTER_ARG) && !(lastName ?? '').includes(FILTER_ARG)) continue;
+            tests.push({ name: lastName ?? samplePath, samplePath, localPath, type });
+        }
+    }
+    return tests;
+}
 
 // ── run ───────────────────────────────────────────────────────────────────────
 
-const stats = { pass: 0, fail: 0 };
+const allTests = loadTests();
+const tests    = LIMIT > 0 ? allTests.slice(0, LIMIT) : allTests;
+
+console.log(`\nfate execution tests — ${tests.length} runnable (${allTests.length} total with samples)\n`);
+
+const stats    = { pass: 0, fail: 0, video: 0, audio: 0 };
 const failures = [];
+const timings  = [];
 
-console.log(`running ${files.length} h264-conformance execution tests...\n`);
-
-for (const file of files) {
-    const filePath = path.join(SAMPLES_DIR, file);
-    const bytes    = new Uint8Array(fs.readFileSync(filePath));
-    let   frames   = 0;
-    let   error    = null;
+for (const t of tests) {
+    const bytes = new Uint8Array(fs.readFileSync(t.localPath));
+    let result  = null;
+    let error   = null;
 
     try {
-        frames = decodeAll(bytes);
+        result = t.type === 'audio' ? decodeAudio(bytes) : decodeVideo(bytes);
         stats.pass++;
-        if (VERBOSE) console.log(`  PASS  ${file}  (${frames} frames)`);
+        stats[t.type]++;
+        timings.push({ ...t, ...result });
+        if (VERBOSE) {
+            if (t.type === 'video')
+                console.log(`  PASS  [${t.type}] ${t.name}  ${result.w}x${result.h} ${result.frames}f  ${result.ms}ms`);
+            else
+                console.log(`  PASS  [${t.type}] ${t.name}  ${result.channels}ch@${result.sampleRate}Hz  ${result.chunks} chunks  ${result.ms}ms`);
+        }
     } catch (e) {
         error = e.message;
         stats.fail++;
-        failures.push({ file, error });
-        if (VERBOSE) console.error(`  FAIL  ${file}  — ${error}`);
+        failures.push({ ...t, error });
+        if (VERBOSE) console.error(`  FAIL  [${t.type}] ${t.name}  — ${error}`);
     }
 }
 
 // ── report ────────────────────────────────────────────────────────────────────
 
-console.log('');
-console.log('h264-conformance execution results');
-console.log('─'.repeat(50));
-console.log(`  Files tested:  ${files.length}`);
-console.log(`  Pass:          ${stats.pass}`);
-console.log(`  Fail:          ${stats.fail}`);
-if (files.length > 0)
-    console.log(`  Pass rate:     ${((stats.pass / files.length) * 100).toFixed(1)}%`);
+const total = stats.pass + stats.fail;
+console.log('fate execution results');
+console.log('─'.repeat(55));
+console.log(`  Total run:   ${total}`);
+console.log(`  Pass:        ${stats.pass}  (video: ${stats.video}, audio: ${stats.audio})`);
+console.log(`  Fail:        ${stats.fail}`);
+console.log(`  Pass rate:   ${((stats.pass / total) * 100).toFixed(1)}%`);
+
+if (timings.length) {
+    // top 5 slowest
+    const slowest = [...timings].sort((a, b) => b.ms - a.ms).slice(0, 5);
+    console.log('\n  Slowest decodes:');
+    for (const t of slowest) {
+        const desc = t.frames != null
+            ? `${t.frames} frames  ${t.ms}ms`
+            : `${t.chunks} chunks  ${t.ms}ms`;
+        console.log(`    ${t.ms.toString().padStart(5)}ms  ${path.basename(t.samplePath)}  (${desc})`);
+    }
+}
+
 console.log('');
 
 if (failures.length && !VERBOSE) {
-    console.log('Failures:');
-    for (const { file, error } of failures)
-        console.log(`  ${file}: ${error}`);
+    const shown = failures.slice(0, 20);
+    console.log(`Failures (${failures.length} total):`);
+    for (const { name, error } of shown)
+        console.log(`  ${name}: ${error}`);
+    if (failures.length > 20) console.log(`  … and ${failures.length - 20} more`);
 }

@@ -1,0 +1,240 @@
+{
+  "date": "2026-06-09",
+  "sha": "10d794d630",
+  "wasmKb": 3859,
+  "total": {
+    "pass": 359,
+    "fail": 857,
+    "pct": 29.5
+  },
+  "codecs": {
+    "aac": {
+      "pass": 68,
+      "total": 94,
+      "pct": 72.3,
+      "type": "audio"
+    },
+    "ac3": {
+      "pass": 0,
+      "total": 26,
+      "pct": 0,
+      "type": "audio"
+    },
+    "alac": {
+      "pass": 1,
+      "total": 1,
+      "pct": 100,
+      "type": "video"
+    },
+    "amr": {
+      "pass": 0,
+      "total": 18,
+      "pct": 0,
+      "type": "audio"
+    },
+    "ape": {
+      "pass": 0,
+      "total": 5,
+      "pct": 0,
+      "type": "video"
+    },
+    "av1": {
+      "pass": 0,
+      "total": 1,
+      "pct": 0,
+      "type": "video"
+    },
+    "bmp": {
+      "pass": 0,
+      "total": 14,
+      "pct": 0,
+      "type": "video"
+    },
+    "dnxhd": {
+      "pass": 0,
+      "total": 9,
+      "pct": 0,
+      "type": "video"
+    },
+    "dts": {
+      "pass": 0,
+      "total": 7,
+      "pct": 0,
+      "type": "video"
+    },
+    "flac": {
+      "pass": 1,
+      "total": 2,
+      "pct": 50,
+      "type": "video"
+    },
+    "gif": {
+      "pass": 0,
+      "total": 6,
+      "pct": 0,
+      "type": "video"
+    },
+    "gsm": {
+      "pass": 0,
+      "total": 2,
+      "pct": 0,
+      "type": "video"
+    },
+    "h264": {
+      "pass": 207,
+      "total": 212,
+      "pct": 97.6,
+      "type": "video"
+    },
+    "hevc": {
+      "pass": 13,
+      "total": 15,
+      "pct": 86.7,
+      "type": "video"
+    },
+    "jpeg2000": {
+      "pass": 0,
+      "total": 16,
+      "pct": 0,
+      "type": "video"
+    },
+    "mjpeg": {
+      "pass": 0,
+      "total": 5,
+      "pct": 0,
+      "type": "video"
+    },
+    "mp3": {
+      "pass": 1,
+      "total": 2,
+      "pct": 50,
+      "type": "video"
+    },
+    "mpeg2": {
+      "pass": 0,
+      "total": 17,
+      "pct": 0,
+      "type": "video"
+    },
+    "mpeg4": {
+      "pass": 0,
+      "total": 8,
+      "pct": 0,
+      "type": "video"
+    },
+    "opus": {
+      "pass": 1,
+      "total": 9,
+      "pct": 11.1,
+      "type": "video"
+    },
+    "other": {
+      "pass": 33,
+      "total": 555,
+      "pct": 5.9,
+      "type": "video"
+    },
+    "pcm": {
+      "pass": 0,
+      "total": 60,
+      "pct": 0,
+      "type": "video"
+    },
+    "png": {
+      "pass": 9,
+      "total": 10,
+      "pct": 90,
+      "type": "video"
+    },
+    "prores": {
+      "pass": 0,
+      "total": 12,
+      "pct": 0,
+      "type": "video"
+    },
+    "theora": {
+      "pass": 0,
+      "total": 3,
+      "pct": 0,
+      "type": "video"
+    },
+    "tiff": {
+      "pass": 0,
+      "total": 8,
+      "pct": 0,
+      "type": "video"
+    },
+    "truehd": {
+      "pass": 0,
+      "total": 5,
+      "pct": 0,
+      "type": "video"
+    },
+    "vc1": {
+      "pass": 0,
+      "total": 11,
+      "pct": 0,
+      "type": "video"
+    },
+    "vorbis": {
+      "pass": 20,
+      "total": 23,
+      "pct": 87,
+      "type": "audio"
+    },
+    "vp3": {
+      "pass": 0,
+      "total": 1,
+      "pct": 0,
+      "type": "video"
+    },
+    "vp6": {
+      "pass": 0,
+      "total": 8,
+      "pct": 0,
+      "type": "video"
+    },
+    "vp7": {
+      "pass": 0,
+      "total": 2,
+      "pct": 0,
+      "type": "video"
+    },
+    "vp8": {
+      "pass": 3,
+      "total": 4,
+      "pct": 75,
+      "type": "video"
+    },
+    "vp9": {
+      "pass": 2,
+      "total": 3,
+      "pct": 66.7,
+      "type": "video"
+    },
+    "wavpack": {
+      "pass": 0,
+      "total": 30,
+      "pct": 0,
+      "type": "video"
+    },
+    "webp": {
+      "pass": 0,
+      "total": 7,
+      "pct": 0,
+      "type": "video"
+    },
+    "wmav": {
+      "pass": 0,
+      "total": 3,
+      "pct": 0,
+      "type": "audio"
+    },
+    "wmv3": {
+      "pass": 0,
+      "total": 2,
+      "pct": 0,
+      "type": "video"
+    }
+  }
+}
