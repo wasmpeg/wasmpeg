@@ -52,7 +52,7 @@ const PRESETS = {
             // Bink (game video/audio)
             'bink', 'binkaudio_dct', 'binkaudio_rdft',
             // legacy / game
-            'theora', 'vp3', 'vp6f', 'vp7', 'rv10', 'rv20', 'rv30', 'rv40',
+            'theora', 'vp3', 'vp6', 'vp6a', 'vp6f', 'vp7', 'rv10', 'rv20', 'rv30', 'rv40',
             'flashsv', 'flashsv2', 'cinepak', 'msvideo1',
             'fraps', 'cdxl', 'flic', 'zmbv', 'cllc',
             // images
@@ -61,7 +61,7 @@ const PRESETS = {
             // modern audio
             'aac', 'aac_latm', 'opus', 'mp3', 'mp2', 'mp1', 'vorbis', 'flac',
             // surround / professional audio
-            'ac3', 'eac3', 'dca', 'truehd', 'mlp',
+            'ac3', 'ac3_fixed', 'eac3', 'dca', 'truehd', 'mlp',
             // lossless audio
             'alac', 'wavpack', 'ape', 'tta', 'shorten',
             // Microsoft audio
@@ -88,6 +88,7 @@ const PRESETS = {
             'huffyuv', 'ffv1',
             // audio
             'aac', 'opus', 'flac', 'mp2', 'wavpack',
+            'wmav1', 'wmav2', 'eac3', 'ac3_fixed',
             'pcm_s16le', 'pcm_s24le', 'pcm_f32le', 'pcm_mulaw', 'pcm_alaw',
             'adpcm_ms', 'adpcm_ima_wav',
         ],
@@ -106,8 +107,17 @@ const PRESETS = {
             // g723.1 audio
             'g723_1',
             // raw bitstreams — note: vp8/vp9 raw uses ivf, mpeg PS = mpegps not mpeg
-            'h264', 'hevc', 'av1', 'ivf',
+            'h264', 'hevc', 'h263', 'h261', 'av1', 'ivf',
+            'm4v',
             'mpegps', 'mpegvideo', 'mpegts', 'rawvideo',
+            // raw VC-1 bitstream (.vc1) and VC-1 test format (.rcv)
+            'vc1', 'vc1t',
+            // raw DNxHD/DNxHR bitstream (.dnxhr)
+            'dnxhd',
+            // EA (Electronic Arts) container — used for VP6 in ea-vp6 test files
+            'ea',
+            // E-AC-3 bare stream
+            'eac3',
             // image pipes — one per format, needed for auto-detection of bare image files
             'image2', 'image2pipe',
             'image_png_pipe', 'image_bmp_pipe', 'image_gif_pipe',
