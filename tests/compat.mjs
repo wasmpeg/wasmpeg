@@ -102,7 +102,12 @@ if (!isMainThread) {
         pcm: 'alp', tun: 'alp',
         znm: 'smush', vqf: 'vqf',
         qcp: 'qcp', xwma: 'xwma',
+        shn: 'shorten', g728: 'g728', dff: 'dsf',
     };
+    // path-fragment → format hint for extensionless files (e.g. dolby_e/16-11)
+    const PATH_FMT = [
+        [/\/dolby_e\//i, 's337m'],
+    ];
     // extensions that are always video even if probe_width is 0
     const EXT_VIDEO = new Set(['dnxhr','rcv']);
 
@@ -114,7 +119,8 @@ if (!isMainThread) {
         byCodec[t.codec].total++;
 
         const ext     = t.samplePath.split('.').pop().toLowerCase();
-        const fmtHint = EXT_FMT[ext];
+        const fmtHint = EXT_FMT[ext]
+            ?? PATH_FMT.find(([re]) => re.test(t.samplePath))?.[1];
 
         let ok = false;
         try {
