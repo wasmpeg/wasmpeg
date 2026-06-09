@@ -92,6 +92,10 @@ const PRESETS = {
             'speex', 'nellymoser', 'amrnb', 'amrwb',
             'g722', 'g723_1', 'g726', 'gsm', 'gsm_ms',
             'atrac1', 'atrac3', 'atrac3p', 'sipr',
+            // legacy / niche decoders needed by FATE
+            'imc', 'truespeech', 'cook', 'ra_144', 'ra_288',
+            'qcelp', 'g728', 'twinvq', 'dolby_e', 'dst',
+            'mpc7', 'mpc8',
         ],
         encoders: [
             // video
@@ -135,6 +139,8 @@ const PRESETS = {
             'roq', 'mve', 'sol', 'xa', 'str',
             'dxa', 'kvag', 'apm', 'alp', 'pp_bnk',
             'argo_asf',
+            // additional containers for FATE niche audio tests
+            'aea', 'brstm', 'bfstm', 'dsf', 'mpc', 'qcp', 'tta', 'vqf', 'xwma',
             // image pipes — one per format, needed for auto-detection of bare image files
             'image2', 'image2pipe',
             'image_png_pipe', 'image_bmp_pipe', 'image_gif_pipe',
