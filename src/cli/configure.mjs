@@ -329,7 +329,7 @@ async function main() {
         const extraCflags  = webgpu ? '-O3 --use-port=emdawnwebgpu' : '-O3 -msimd128';
         const extraLdflags = webgpu
             ? '-O3 --use-port=emdawnwebgpu -s ASYNCIFY -s INITIAL_MEMORY=67108864'
-            : '-O3 --use-port=zlib';
+            : '-O3 -lz';
 
         const content = [
             '#!/bin/bash',
