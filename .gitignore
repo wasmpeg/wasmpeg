@@ -30,8 +30,15 @@ tests/browser-test.html
 fate-suite/
 
 
-# Claude Code session data
+# AI agent session data
 .claude/
+.cursor/
+.aider*
+.copilot/
+.continue/
+.codeium/
+AGENTS.md
+CLAUDE.md
 
 # OS
 .DS_Store
