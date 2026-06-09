@@ -3,5 +3,30 @@
   "version": "0.1.0",
   "description": "WebGPU-accelerated FFmpeg compiled to WebAssembly",
   "license": "LGPL-2.1-or-later",
-  "type": "module"
+  "type": "module",
+  "main": "src/js/index.js",
+  "exports": {
+    ".": "./src/js/index.js"
+  },
+  "files": [
+    "src/js/",
+    "dist/cpu.js",
+    "dist/cpu.wasm",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node tests/test.mjs",
+    "build": "bash scripts/build.sh",
+    "compat": "node tests/compat.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/viju/wasmpeg.git"
+  },
+  "keywords": ["ffmpeg", "wasm", "webgpu", "video", "audio", "decode", "encode"],
+  "sideEffects": false
 }
