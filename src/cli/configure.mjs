@@ -73,10 +73,21 @@ const PRESETS = {
             'pcm_s32le', 'pcm_s32be', 'pcm_u32le', 'pcm_u32be',
             'pcm_f32le', 'pcm_f32be', 'pcm_f64le', 'pcm_f64be',
             'pcm_mulaw', 'pcm_alaw', 'pcm_dvd', 'pcm_bluray', 'pcm_vidc',
-            // ADPCM
+            // ADPCM — common
             'adpcm_ms', 'adpcm_ima_wav', 'adpcm_ima_qt',
             'adpcm_swf', 'adpcm_yamaha', 'adpcm_thp',
             'adpcm_g726', 'adpcm_g726le', 'adpcm_g722',
+            // ADPCM — game / EA variants
+            'adpcm_4xm', 'adpcm_afc', 'adpcm_dtk',
+            'adpcm_ea', 'adpcm_ea_maxis_xa', 'adpcm_ea_r1', 'adpcm_ea_r2', 'adpcm_ea_r3',
+            'adpcm_ima_amv', 'adpcm_ima_apc', 'adpcm_ima_dk3', 'adpcm_ima_dk4',
+            'adpcm_ima_ea_eacs', 'adpcm_ima_ea_sead',
+            'adpcm_ima_iss', 'adpcm_ima_oki', 'adpcm_ima_rad', 'adpcm_ima_smjpeg', 'adpcm_ima_ws',
+            'adpcm_argo', 'adpcm_sanyo', 'adpcm_vima', 'adpcm_xa',
+            // ADPCM — creative / SB
+            'adpcm_sbpro_2', 'adpcm_sbpro_3', 'adpcm_sbpro_4',
+            // DPCM
+            'roq_dpcm', 'interplay_dpcm', 'sol_dpcm', 'xan_dpcm',
             // other audio
             'speex', 'nellymoser', 'amrnb', 'amrwb',
             'g722', 'g723_1', 'g726', 'gsm', 'gsm_ms',
@@ -118,6 +129,12 @@ const PRESETS = {
             'ea',
             // E-AC-3 bare stream
             'eac3',
+            // game / multimedia containers for ADPCM/DPCM FATE tests
+            'fourxm', 'ast', 'voc', 'amv', 'apc',
+            'wsvqa', 'iss', 'rsd', 'smjpeg', 'smush',
+            'roq', 'mve', 'sol', 'xa', 'str',
+            'dxa', 'kvag', 'apm', 'alp', 'pp_bnk',
+            'argo_asf',
             // image pipes — one per format, needed for auto-detection of bare image files
             'image2', 'image2pipe',
             'image_png_pipe', 'image_bmp_pipe', 'image_gif_pipe',
