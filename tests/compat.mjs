@@ -86,14 +86,20 @@ if (!isMainThread) {
         byCodec[t.codec] ??= { pass: 0, total: 0, type: t.type };
         byCodec[t.codec].total++;
 
+        let ok = false;
         try {
-            if (t.type === 'video') decodeVideo(bytes);
-            else                    decodeAudio(bytes);
-            byCodec[t.codec].pass++;
-            parentPort.postMessage({ type: 'tick', ok: true });
-        } catch {
-            parentPort.postMessage({ type: 'tick', ok: false });
-        }
+            const ptr = alloc(bytes);
+            const ph  = cc('probe_open', 'number', ['number','number'], [ptr, bytes.byteLength]);
+            mod._free(ptr);
+            const hasVideo = ph >= 0 && cc('probe_width',  'number', ['number'], [ph]) > 0;
+            if (ph >= 0) cc('probe_close', null, ['number'], [ph]);
+
+            if (hasVideo) decodeVideo(bytes);
+            else          decodeAudio(bytes);
+            ok = true;
+        } catch {}
+        byCodec[t.codec].pass += ok ? 1 : 0;
+        parentPort.postMessage({ type: 'tick', ok });
     }
 
     parentPort.postMessage({ type: 'done', byCodec });
