@@ -141,6 +141,7 @@ const PRESETS = {
             'argo_asf',
             // additional containers for FATE niche audio tests
             'aea', 'brstm', 'bfstm', 'dsf', 'mpc', 'qcp', 'tta', 'vqf', 'xwma',
+            'shorten', 'g728', 's337m',
             // image pipes — one per format, needed for auto-detection of bare image files
             'image2', 'image2pipe',
             'image_png_pipe', 'image_bmp_pipe', 'image_gif_pipe',
