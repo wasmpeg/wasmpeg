@@ -59,9 +59,11 @@ if (!isMainThread) {
         cc('decoder_close', null, ['number'], [handle]);
     }
 
-    function decodeAudio(bytes) {
+    function decodeAudio(bytes, fmtHint) {
         const ptr    = alloc(bytes);
-        const handle = cc('audio_open', 'number', ['number','number'], [ptr, bytes.byteLength]);
+        const handle = fmtHint
+            ? cc('audio_open_format', 'number', ['number','number','string'], [ptr, bytes.byteLength, fmtHint])
+            : cc('audio_open', 'number', ['number','number'], [ptr, bytes.byteLength]);
         mod._free(ptr);
         if (handle < 0) throw new Error(`audio_open: ${handle}`);
 
@@ -79,12 +81,21 @@ if (!isMainThread) {
         cc('audio_close', null, ['number'], [handle]);
     }
 
+    // extension-only demuxers can't be content-probed; hint the format directly
+    const EXT_FMT = {
+        g722: 'g722', '722': 'g722',
+        tco: 'g723_1', rco: 'g723_1', g723_1: 'g723_1',
+    };
+
     const byCodec = {};
 
     for (const t of tests) {
         const bytes = new Uint8Array(fs.readFileSync(t.localPath));
         byCodec[t.codec] ??= { pass: 0, total: 0, type: t.type };
         byCodec[t.codec].total++;
+
+        const ext     = t.samplePath.split('.').pop().toLowerCase();
+        const fmtHint = EXT_FMT[ext];
 
         let ok = false;
         try {
@@ -94,8 +105,8 @@ if (!isMainThread) {
             const hasVideo = ph >= 0 && cc('probe_width',  'number', ['number'], [ph]) > 0;
             if (ph >= 0) cc('probe_close', null, ['number'], [ph]);
 
-            if (hasVideo) decodeVideo(bytes);
-            else          decodeAudio(bytes);
+            if (hasVideo)   decodeVideo(bytes);
+            else            decodeAudio(bytes, fmtHint);
             ok = true;
         } catch {}
         byCodec[t.codec].pass += ok ? 1 : 0;
