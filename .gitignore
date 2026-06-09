@@ -29,8 +29,8 @@ tests/browser-test.html
 # fate test samples (local only, rsynced on demand)
 fate-suite/
 
-# compat run snapshots — dated files are local only, latest.json is committed
-tests/results/20*.json
+# compat results — history.json and COMPAT.md are committed, nothing else needed
+tests/results/
 
 # Claude Code session data
 .claude/
