@@ -127,16 +127,33 @@ function parseSamplePath(cmd) {
 
 function guessCodec(name, samplePath) {
     const knownCodecs = [
+        // video — modern
         'h264','hevc','vp8','vp9','av1',
-        'mpeg1','mpeg2','mpeg4','h263',
-        'wmv1','wmv2','wmv3','vc1',
-        'canopus','prores','dnxhd','mjpeg','huffyuv','ffv1',
-        'theora','vp3','vp6','vp7',
+        // video — classic / broadcast
+        'mpeg1','mpeg2','mpeg4','h263','h261',
+        // video — Microsoft
+        'wmv1','wmv2','wmv3','vc1','mss2',
+        // video — Apple / professional
+        'canopus','prores','dnxhd','mjpeg','qtrle','svq1','svq3','cfhd',
+        // video — lossless / archival
+        'huffyuv','ffv1','magicyuv','lagarith','hap','utvideo',
+        // video — Bink
+        'bink',
+        // video — legacy
+        'theora','vp3','vp6','vp7','cinepak','msvideo1',
+        // images
+        'exr','psd','jpeg2000','jpegls','webp','tiff','bmp','gif','png','dpx','tga',
+        // audio — modern
         'aac','opus','mp3','mp2','vorbis','flac',
+        // audio — surround
         'ac3','eac3','dts','truehd','alac',
-        'wmav','wavpack','ape',
+        // audio — lossless
+        'wavpack','ape','tta','shorten',
+        // audio — Microsoft
+        'wmav','wmapro','wmalossless',
+        // audio — PCM / ADPCM
         'pcm','adpcm','amr','speex','gsm',
-        'gif','png','bmp','tiff','jpeg2000','webp',
+        'g722','g723','g726','sipr','nellymoser',
     ];
     const haystack = (name + ' ' + samplePath).toLowerCase();
     for (const c of knownCodecs) if (haystack.includes(c)) return c;
