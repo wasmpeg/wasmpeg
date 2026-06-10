@@ -103,6 +103,8 @@ if (!isMainThread) {
         znm: 'smush', vqf: 'vqf',
         qcp: 'qcp', xwma: 'xwma',
         shn: 'shorten', g728: 'g728', dff: 'dsf',
+        // TrueHD raw bitstream (.thd) — truehd demuxer probe-blind
+        thd: 'truehd',
     };
     // path-fragment → format hint for extensionless files (e.g. dolby_e/16-11)
     const PATH_FMT = [
