@@ -228,7 +228,6 @@ export async function exec(input, args) {
 
     const parsed = parseArgs(args);
     const outOpts = parsed.outputs[0]?.options ?? {};
-    const isAudioOnly = '-vn' in outOpts || (('-an' in outOpts) === false && !('-vf' in outOpts) && !('-filter:v' in outOpts));
 
     // ── resolve video filter ──────────────────────────────────────────────────
     const vf = outOpts['-vf'] ?? outOpts['-filter:v'];

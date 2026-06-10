@@ -181,13 +181,7 @@ function createAudioDecoder(fileBytes, fmtName) {
                 [handle, pcmBuf, cap]);
             if (ret === 1) return null;
             if (ret < 0) throw new Error(`audio_next_samples failed: ${ret}`);
-            if (ret > cap) {
-                // Frame was larger than expected — grow and retry is not possible here;
-                // the data is already written. This shouldn't happen in practice since
-                // swr_convert is bounded by max_floats. Return what we got.
-            }
-            return new Float32Array(_mod.HEAPU8.buffer,
-                pcmBuf, ret).slice();
+            return new Float32Array(_mod.HEAPU8.buffer, pcmBuf, ret).slice();
         },
 
         close() {
