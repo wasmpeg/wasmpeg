@@ -494,6 +494,57 @@ int decoder_next_frame(int handle, uint8_t *dst_rgba, int dst_w, int dst_h)
     }
 }
 
+/*
+ * Decode the next frame and copy it out in its native pixel format, packed
+ * tightly (align=1) the same way FFmpeg's rawvideo encoder / framecrc muxer
+ * lays it out. This lets callers reproduce FATE's reference checksums exactly,
+ * which decoder_next_frame can't do since it converts to RGBA.
+ *
+ * Returns the byte count written (>0), 0 at end of stream, or a negative
+ * AVERROR. The caller should size dst at width*height*8 to fit any pixel format.
+ */
+EMSCRIPTEN_KEEPALIVE
+int decoder_next_raw_frame(int handle, uint8_t *dst, int dst_cap)
+{
+    if (handle < 0 || handle >= MAX_SESSIONS || !g_dec[handle].active)
+        return AVERROR(EINVAL);
+    DecodeSession *s = &g_dec[handle];
+
+    for (;;) {
+        int ret = avcodec_receive_frame(s->codec_ctx, s->frame);
+        if (ret == 0) {
+            int w = s->frame->width, h = s->frame->height;
+            enum AVPixelFormat fmt = s->frame->format;
+            int size = av_image_get_buffer_size(fmt, w, h, 1);
+            if (size < 0)        { av_frame_unref(s->frame); return size; }
+            if (size > dst_cap)  { av_frame_unref(s->frame); return AVERROR(ENOMEM); }
+            av_image_copy_to_buffer(dst, dst_cap,
+                (const uint8_t *const *)s->frame->data, s->frame->linesize,
+                fmt, w, h, 1);
+            s->width  = w;
+            s->height = h;
+            av_frame_unref(s->frame);
+            return size;
+        }
+        if (ret != AVERROR(EAGAIN)) return ret == AVERROR_EOF ? 0 : ret;
+
+        for (;;) {
+            ret = av_read_frame(s->fmt_ctx, s->pkt);
+            if (ret < 0) {
+                avcodec_send_packet(s->codec_ctx, NULL);
+                break;
+            }
+            if (s->pkt->stream_index == s->video_stream) {
+                ret = avcodec_send_packet(s->codec_ctx, s->pkt);
+                av_packet_unref(s->pkt);
+                if (ret < 0) return ret;
+                break;
+            }
+            av_packet_unref(s->pkt);
+        }
+    }
+}
+
 EMSCRIPTEN_KEEPALIVE
 void decoder_close(int handle)
 {

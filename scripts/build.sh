@@ -21,7 +21,7 @@ else
     OUT_PREFIX=""
 fi
 
-DECODER_EXPORTS="_decoder_open,_decoder_open_format,_decoder_open_file,_decoder_width,_decoder_height,_decoder_fps_num,_decoder_fps_den,_decoder_next_frame,_decoder_close"
+DECODER_EXPORTS="_decoder_open,_decoder_open_format,_decoder_open_file,_decoder_width,_decoder_height,_decoder_fps_num,_decoder_fps_den,_decoder_next_frame,_decoder_next_raw_frame,_decoder_close"
 AUDIO_EXPORTS="_audio_open,_audio_open_format,_audio_channels,_audio_sample_rate,_audio_next_samples,_audio_close"
 PROBE_EXPORTS="_probe_open,_probe_format_name,_probe_duration_ms,_probe_stream_count,_probe_stream_type,_probe_width,_probe_height,_probe_fps_num,_probe_fps_den,_probe_sample_rate,_probe_channels,_probe_bitrate,_probe_close"
 ENCODER_EXPORTS="_encoder_open,_encoder_push_rgba,_encoder_finish,_encoder_output_ptr,_encoder_output_size,_encoder_close"
