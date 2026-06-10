@@ -57,8 +57,19 @@ const PRESETS = {
             'fraps', 'cdxl', 'flic', 'zmbv', 'cllc', 'hq_hqa', 'hqx', 'speedhq',
             // Intel Indeo, LOCO, Microsoft RLE, DV — legacy AVI/MOV video
             'indeo2', 'indeo3', 'indeo4', 'indeo5', 'loco', 'msrle', 'dvvideo',
+            // screen-capture / lossless-ish AVI/MOV codecs
+            'dxtory', 'fic', 'fmvc', 'frwu', 'mszh', 'zlib', 'lscr', 'rscc',
+            'tscc', 'tscc2', 'vble', 'zerocodec', 'mwsc', 'screenpresso',
+            'g2meet', 'mss1', 'lead', 'dxv', 'aic',
+            // legacy / game / vendor video codecs
+            'aura', 'aura2', 'cljr', 'cyuv', 'ulti', 'vcr1', 'xl', 'wnv1', 'vqc',
+            'truemotion1', 'truemotion2', 'truemotion2rt', 'xan_wc3', 'xan_wc4',
+            'vp4', 'vp5', 'mimic', 'mdec', 'eamad', 'eatgq', 'sgirle',
+            'nuv', 'rv60', 'thp', 'txd', 'mts2', 'avui', 'avrn', 'cavs',
+            'roqvideo', 'dirac',
             // images
-            'png', 'gif', 'bmp', 'tiff', 'webp', 'tga', 'dpx', 'xbm',
+            'png', 'apng', 'gif', 'bmp', 'tiff', 'webp', 'tga', 'targa', 'dpx', 'xbm',
+            'sunrast', 'xface',
             'jpeg2000', 'jpegls', 'exr', 'psd',
             // modern audio
             'aac', 'aac_latm', 'opus', 'mp3', 'mp2', 'mp1', 'vorbis', 'flac',
@@ -135,6 +146,8 @@ const PRESETS = {
             'vc1', 'vc1t',
             // raw DNxHD/DNxHR bitstream (.dnxhr)
             'dnxhd',
+            // containers for the legacy/game video decoders above
+            'nuv', 'thp', 'txd', 'mv', 'cavsvideo', 'apng', 'dirac',
             // EA (Electronic Arts) container — used for VP6 in ea-vp6 test files
             'ea',
             // E-AC-3 bare stream
@@ -159,6 +172,7 @@ const PRESETS = {
             'image_j2k_pipe', 'image_jpeg_pipe', 'image_jpegls_pipe',
             'image_exr_pipe', 'image_psd_pipe',
             'image_dpx_pipe', 'image_tga_pipe',
+            'image_xbm_pipe', 'image_sunrast_pipe', 'image_xface_pipe',
             // PCM raw — covers all signed/unsigned/float variants used in FATE
             'pcm_s8', 'pcm_u8',
             'pcm_s16le', 'pcm_s16be', 'pcm_u16le', 'pcm_u16be',
@@ -179,7 +193,7 @@ const PRESETS = {
             'h264', 'hevc', 'vp8', 'vp9', 'av1',
             'mpeg4video', 'mpegvideo', 'h263', 'vc1', 'dvbsub', 'dvdsub',
             'aac', 'aac_latm', 'ac3', 'dca', 'flac', 'opus',
-            'mpegaudio', 'png', 'gif', 'bmp',
+            'mpegaudio', 'png', 'gif', 'bmp', 'cavsvideo', 'vp3', 'dirac',
         ],
         protocols: ['file'],
         filters: [
