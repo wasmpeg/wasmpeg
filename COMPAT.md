@@ -1,8 +1,8 @@
 # FATE Compatibility
 
-Last run: **2026-06-10** · commit `0a5d88d132` · WASM **6612 KB**
+Last run: **2026-06-10** · commit `b5cc9e38ca` · WASM **6612 KB**
 
-## Overall: 901/1242 (72.5%)
+## Overall: 924/1242 (74.4%)
 
 | Codec | Type | Pass | Total | Rate |
 |-------|------|-----:|------:|-----:|
@@ -33,7 +33,7 @@ Last run: **2026-06-10** · commit `0a5d88d132` · WASM **6612 KB**
 | gsm | video | 2 | 2 | 100.0% |
 | h264 | video | 209 | 212 | 98.6% |
 | hap | video | 13 | 13 | 100.0% |
-| hevc | video | 13 | 15 | 86.7% |
+| hevc | video | 15 | 15 | 100.0% |
 | imc | audio | 1 | 1 | 100.0% |
 | jpeg2000 | video | 16 | 16 | 100.0% |
 | jpegls | video | 4 | 6 | 66.7% |
@@ -48,9 +48,9 @@ Last run: **2026-06-10** · commit `0a5d88d132` · WASM **6612 KB**
 | musepack | audio | 2 | 4 | 50.0% |
 | nellymoser | audio | 1 | 1 | 100.0% |
 | opus | video | 1 | 1 | 100.0% |
-| other | video | 110 | 364 | 30.2% |
+| other | video | 124 | 364 | 34.1% |
 | pcm | video | 29 | 63 | 46.0% |
-| png | video | 9 | 10 | 90.0% |
+| png | video | 10 | 10 | 100.0% |
 | prores | video | 12 | 12 | 100.0% |
 | psd | video | 7 | 7 | 100.0% |
 | qcelp | audio | 1 | 1 | 100.0% |
@@ -63,9 +63,9 @@ Last run: **2026-06-10** · commit `0a5d88d132` · WASM **6612 KB**
 | svq1 | video | 2 | 2 | 100.0% |
 | svq3 | video | 3 | 3 | 100.0% |
 | tga | video | 0 | 1 | 0.0% |
-| theora | video | 2 | 3 | 66.7% |
+| theora | video | 3 | 3 | 100.0% |
 | tiff | video | 5 | 8 | 62.5% |
-| truehd | video | 2 | 5 | 40.0% |
+| truehd | video | 5 | 5 | 100.0% |
 | truespeech | audio | 1 | 1 | 100.0% |
 | tta | audio | 1 | 2 | 50.0% |
 | twinvq | audio | 1 | 1 | 100.0% |
@@ -81,7 +81,7 @@ Last run: **2026-06-10** · commit `0a5d88d132` · WASM **6612 KB**
 | webp | video | 7 | 7 | 100.0% |
 | wmapro | audio | 2 | 2 | 100.0% |
 | wmav | audio | 3 | 3 | 100.0% |
-| wmv3 | video | 0 | 2 | 0.0% |
+| wmv3 | video | 2 | 2 | 100.0% |
 
 ---
 
