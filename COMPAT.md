@@ -1,19 +1,19 @@
 # FATE Compatibility
 
-Last run: **2026-06-09** · commit `1244d44977` · WASM **6597 KB**
+Last run: **2026-06-10** · commit `0a5d88d132` · WASM **6612 KB**
 
-## Overall: 890/1242 (71.7%)
+## Overall: 901/1242 (72.5%)
 
 | Codec | Type | Pass | Total | Rate |
 |-------|------|-----:|------:|-----:|
 | aac | audio | 94 | 95 | 98.9% |
-| ac3 | audio | 21 | 26 | 80.8% |
+| ac3 | audio | 25 | 26 | 96.2% |
 | alac | video | 1 | 1 | 100.0% |
 | amr | audio | 18 | 18 | 100.0% |
-| ape | video | 3 | 5 | 60.0% |
+| ape | video | 5 | 5 | 100.0% |
 | atrac | audio | 2 | 2 | 100.0% |
 | av1 | video | 0 | 1 | 0.0% |
-| bink | audio | 4 | 6 | 66.7% |
+| bink | audio | 6 | 6 | 100.0% |
 | bmp | video | 14 | 14 | 100.0% |
 | canopus | video | 8 | 8 | 100.0% |
 | cfhd | video | 3 | 3 | 100.0% |
@@ -48,7 +48,7 @@ Last run: **2026-06-09** · commit `1244d44977` · WASM **6597 KB**
 | musepack | audio | 2 | 4 | 50.0% |
 | nellymoser | audio | 1 | 1 | 100.0% |
 | opus | video | 1 | 1 | 100.0% |
-| other | video | 107 | 364 | 29.4% |
+| other | video | 110 | 364 | 30.2% |
 | pcm | video | 29 | 63 | 46.0% |
 | png | video | 9 | 10 | 90.0% |
 | prores | video | 12 | 12 | 100.0% |
