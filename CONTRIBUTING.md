@@ -67,31 +67,41 @@ See [docs/configuration.md](docs/configuration.md) for how presets compose.
 
 ## Testing
 
-Always run the suite before committing — it must be green:
+Three test layers, each answering a different question. The first two gate every
+commit (`make verify`); the last two are tracking reports run against a build.
+
+| Run | Layer | Question |
+|-----|-------|----------|
+| `node tests/test.mjs` | JS API + C pipeline | does the API behave? (unit/integration) |
+| `node tests/fate-runner.mjs` | `exec()` arg parser | does every FATE command parse and route right? |
+| `node tests/compat.mjs` | decode pipeline | does it decode without erroring? → [COMPAT.md](COMPAT.md) |
+| `node tests/fate.mjs` | decode pipeline | does it decode to the exact bytes? → [CORRECTNESS.md](CORRECTNESS.md) |
+
+Always run `node tests/test.mjs` before committing — it must be green. It's a single
+framework-free file using an `ok(message, condition)` helper, grouped by layer
+(pipeline / decoder / `FFmpeg` class / `gpu`). Add assertions to the group that matches
+what you touched. See [docs/testing.md](docs/testing.md).
+
+### Compatibility and correctness (FATE)
+
+Both reports need a `gpl-cpu` build and run against the FATE sample suite:
 
 ```sh
-node tests/test.mjs
+make compat    # node tests/compat.mjs — coverage, writes COMPAT.md + results/history.json
+make fate      # node tests/fate.mjs   — correctness, writes CORRECTNESS.md + results/correctness-history.json
 ```
 
-The suite is a single framework-free file using an `ok(message, condition)` helper,
-grouped by layer (pipeline / decoder / `FFmpeg` class / `gpu`). Add new assertions to
-the group that matches the layer you touched. See [docs/testing.md](docs/testing.md).
+`compat.mjs` checks that a file decodes at all. `fate.mjs` is stricter: it decodes each
+frame in its native pixel format and compares the per-frame Adler-32 to FFmpeg's
+vendored reference in `vendor/ffmpeg/tests/ref/fate/`, so a test passes only when the
+output is byte-identical. No native ffmpeg needed — the references match our exact
+FFmpeg version.
 
-### Compatibility tracking (FATE)
-
-`tests/compat.mjs` runs wasmpeg against FFmpeg's FATE sample suite and writes
-[COMPAT.md](COMPAT.md) + `tests/results/history.json`:
-
-```sh
-node tests/compat.mjs                 # full run
-node tests/compat.mjs --filter=h264   # one codec, no save
-```
-
-**Keep the score honest.** compat.mjs is a *measurement* tool — prefer fixing gaps in
-the library (`configure.mjs` for missing codecs, `src/js` / `src/pipeline.c` for real
-behavior) over adding routing tricks to the harness that inflate the number without
-making the shipped library any better. A fix should help a real user, not just the
-test.
+**Keep the score honest.** These are *measurement* tools. Prefer fixing gaps in the
+library (`configure.mjs` for missing codecs, `src/js` / `src/pipeline.c` for behavior)
+over routing tricks in the harness that lift the number without helping a real user.
+Correctness is the number that means something: coverage says we attempt a codec,
+correctness says we decode it right.
 
 ## Maintenance tasks
 
