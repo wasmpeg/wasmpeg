@@ -18,6 +18,7 @@
 
 import { gpu } from './gpu.js';
 import { exec, normalizeInput } from './exec.mjs';
+import { formatHint } from './formats.js';
 
 let _loaded = false;
 
@@ -44,6 +45,9 @@ async function scale(input, dstW, dstH, filter) {
 /**
  * Open a video decoder and return a frame iterator.
  *
+ * Pass `format` to force a demuxer; otherwise it's inferred from the source
+ * filename for formats that don't content-probe (see formats.js).
+ *
  * Returns { width, height, fps, nextFrame(), close() }.
  */
 async function decode(input, { format } = {}) {
@@ -51,11 +55,14 @@ async function decode(input, { format } = {}) {
     const norm = await normalizeInput(input);
     if (norm.rgba) throw new Error('decode() does not accept raw pixel input — use scale() instead');
     if (norm.fspath) return gpu.createDecoderFile(norm.fspath);
-    return gpu.createDecoder(norm.bytes, format);
+    return gpu.createDecoder(norm.bytes, format ?? formatHint(norm.name));
 }
 
 /**
  * Open an audio decoder and return a sample iterator.
+ *
+ * Pass `format` to force a demuxer; otherwise it's inferred from the source
+ * filename (see formats.js).
  *
  * Returns { channels, sampleRate, nextSamples(), close() }
  * where nextSamples() returns a Float32Array of interleaved f32le samples or null at EOF.
@@ -65,7 +72,7 @@ async function decodeAudio(input, { format } = {}) {
     const norm = await normalizeInput(input);
     if (norm.rgba) throw new Error('decodeAudio() does not accept raw pixel input');
     if (norm.fspath) throw new Error('decodeAudio() does not support FS paths yet');
-    return gpu.createAudioDecoder(norm.bytes, format);
+    return gpu.createAudioDecoder(norm.bytes, format ?? formatHint(norm.name));
 }
 
 /**
@@ -120,7 +127,7 @@ async function encode(input, opts = {}) {
     } else {
         dec  = norm.fspath
             ? gpu.createDecoderFile(norm.fspath)
-            : gpu.createDecoder(norm.bytes, opts.format);
+            : gpu.createDecoder(norm.bytes, opts.format ?? formatHint(norm.name));
         srcW = opts.width  ?? dec.width;
         srcH = opts.height ?? dec.height;
     }

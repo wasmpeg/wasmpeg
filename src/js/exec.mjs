@@ -144,8 +144,12 @@ export function parseArgs(args) {
 
 /**
  * Accept any JS input type and return one of:
- *   { bytes: Uint8Array }                              — encoded file
+ *   { bytes: Uint8Array, name? }                       — encoded file
  *   { rgba: Uint8ClampedArray, width, height }         — raw pixels
+ *   { fspath: string, name }                           — WASM FS path
+ *
+ * `name` is the source filename or path when known (File.name, a URL's
+ * pathname, an FS path). The decoder API uses it to derive a format hint.
  */
 export async function normalizeInput(input) {
     if (input == null) throw new Error('input is null or undefined');
@@ -153,21 +157,23 @@ export async function normalizeInput(input) {
     if (input instanceof Uint8Array)  return { bytes: input };
     if (input instanceof ArrayBuffer) return { bytes: new Uint8Array(input) };
 
-    // Blob / File
+    // Blob / File — File carries a .name, a plain Blob does not.
     if (typeof Blob !== 'undefined' && input instanceof Blob) {
-        return { bytes: new Uint8Array(await input.arrayBuffer()) };
+        return { bytes: new Uint8Array(await input.arrayBuffer()), name: input.name };
     }
 
     // URL string
     if (typeof input === 'string' && (input.startsWith('http://') || input.startsWith('https://'))) {
         const res = await fetch(input);
         if (!res.ok) throw new Error(`fetch ${input} failed: ${res.status} ${res.statusText}`);
-        return { bytes: new Uint8Array(await res.arrayBuffer()) };
+        let name;
+        try { name = new URL(input).pathname; } catch {}
+        return { bytes: new Uint8Array(await res.arrayBuffer()), name };
     }
 
     // WASM FS path — pass straight through, caller uses decoder_open_file
     if (typeof input === 'string' && input.startsWith('/')) {
-        return { fspath: input };
+        return { fspath: input, name: input };
     }
 
     // HTMLVideoElement

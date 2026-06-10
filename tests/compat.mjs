@@ -15,6 +15,7 @@ import os   from 'node:os';
 import fs   from 'node:fs';
 import path from 'node:path';
 import { execSync, spawnSync } from 'node:child_process';
+import { EXT_FMT, PATH_FMT, EXT_VIDEO } from '../src/js/formats.js';
 
 const ROOT        = path.resolve(import.meta.dirname, '..');
 const SAMPLES_DIR = process.env.FATE_SAMPLES ?? path.join(ROOT, 'fate-suite');
@@ -97,29 +98,8 @@ if (!isMainThread) {
         cc('audio_close', null, ['number'], [handle]);
     }
 
-    // extension-only demuxers can't be content-probed; hint the format directly
-    const EXT_FMT = {
-        g722: 'g722', '722': 'g722',
-        tco: 'g723_1', rco: 'g723_1', g723_1: 'g723_1',
-        // other extension-only audio containers
-        adp: 'adp', aea: 'aea', apc: 'apc', apm: 'apm',
-        brstm: 'brstm', bfstm: 'bfstm', bcstm: 'bcstm',
-        iss: 'iss', rsd: 'rsd', sol: 'sol',
-        vag: 'kvag', xa: 'xa',
-        '5c': 'pp_bnk', '11c': 'pp_bnk', '44c': 'pp_bnk',
-        pcm: 'alp', tun: 'alp',
-        znm: 'smush', vqf: 'vqf',
-        qcp: 'qcp', xwma: 'xwma',
-        shn: 'shorten', g728: 'g728', dff: 'dsf',
-        // TrueHD raw bitstream (.thd) — truehd demuxer probe-blind
-        thd: 'truehd',
-    };
-    // path-fragment → format hint for extensionless files (e.g. dolby_e/16-11)
-    const PATH_FMT = [
-        [/\/dolby_e\//i, 's337m'],
-    ];
-    // extensions that are always video even if probe_width is 0
-    const EXT_VIDEO = new Set(['dnxhr','rcv']);
+    // EXT_FMT / PATH_FMT / EXT_VIDEO are imported from ../src/js/formats.js so
+    // the harness and the shipped API resolve format hints the same way.
 
     const byCodec = {};
 
