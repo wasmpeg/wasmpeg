@@ -434,47 +434,16 @@ EMSCRIPTEN_KEEPALIVE int decoder_height(int h)  { return (h>=0&&h<MAX_SESSIONS&&
 EMSCRIPTEN_KEEPALIVE int decoder_fps_num(int h) { return (h>=0&&h<MAX_SESSIONS&&g_dec[h].active)?g_dec[h].fps_num:-1; }
 EMSCRIPTEN_KEEPALIVE int decoder_fps_den(int h) { return (h>=0&&h<MAX_SESSIONS&&g_dec[h].active)?g_dec[h].fps_den:-1; }
 
-EMSCRIPTEN_KEEPALIVE
-int decoder_next_frame(int handle, uint8_t *dst_rgba, int dst_w, int dst_h)
+/*
+ * Pump packets through the decoder until the next frame lands in s->frame.
+ * Returns 0 with a frame ready, 1 at end of stream, or a negative AVERROR.
+ * On success the caller owns s->frame and must av_frame_unref() it.
+ */
+static int decoder_pump(DecodeSession *s)
 {
-    if (handle < 0 || handle >= MAX_SESSIONS || !g_dec[handle].active)
-        return AVERROR(EINVAL);
-    DecodeSession *s = &g_dec[handle];
-
     for (;;) {
         int ret = avcodec_receive_frame(s->codec_ctx, s->frame);
-        if (ret == 0) {
-            int out_w = (dst_w > 0) ? dst_w : s->frame->width;
-            int out_h = (dst_h > 0) ? dst_h : s->frame->height;
-
-            if (!s->sws
-                || s->sws_src_w   != s->frame->width
-                || s->sws_src_h   != s->frame->height
-                || s->sws_src_fmt != s->frame->format
-                || s->sws_dst_w   != out_w
-                || s->sws_dst_h   != out_h) {
-                sws_freeContext(s->sws);
-                s->sws = sws_getContext(
-                    s->frame->width, s->frame->height, s->frame->format,
-                    out_w, out_h, AV_PIX_FMT_RGBA,
-                    SWS_BILINEAR, NULL, NULL, NULL);
-                if (!s->sws) { av_frame_unref(s->frame); return AVERROR(ENOMEM); }
-                s->sws_src_w   = s->frame->width;
-                s->sws_src_h   = s->frame->height;
-                s->sws_src_fmt = s->frame->format;
-                s->sws_dst_w   = out_w;
-                s->sws_dst_h   = out_h;
-            }
-            uint8_t *dst_data[1]   = { dst_rgba };
-            int      dst_stride[1] = { out_w * 4 };
-            sws_scale(s->sws,
-                      (const uint8_t *const *)s->frame->data, s->frame->linesize,
-                      0, s->frame->height, dst_data, dst_stride);
-            s->width  = s->frame->width;
-            s->height = s->frame->height;
-            av_frame_unref(s->frame);
-            return 0;
-        }
+        if (ret == 0)               return 0;
         if (ret != AVERROR(EAGAIN)) return ret == AVERROR_EOF ? 1 : ret;
 
         for (;;) {
@@ -494,6 +463,50 @@ int decoder_next_frame(int handle, uint8_t *dst_rgba, int dst_w, int dst_h)
     }
 }
 
+/* Decode the next frame, scaled and converted to RGBA. Returns 0 on success,
+ * 1 at end of stream, or a negative AVERROR. */
+EMSCRIPTEN_KEEPALIVE
+int decoder_next_frame(int handle, uint8_t *dst_rgba, int dst_w, int dst_h)
+{
+    if (handle < 0 || handle >= MAX_SESSIONS || !g_dec[handle].active)
+        return AVERROR(EINVAL);
+    DecodeSession *s = &g_dec[handle];
+
+    int ret = decoder_pump(s);
+    if (ret != 0) return ret;            /* 1 = EOF, <0 = error */
+
+    int out_w = (dst_w > 0) ? dst_w : s->frame->width;
+    int out_h = (dst_h > 0) ? dst_h : s->frame->height;
+
+    if (!s->sws
+        || s->sws_src_w   != s->frame->width
+        || s->sws_src_h   != s->frame->height
+        || s->sws_src_fmt != s->frame->format
+        || s->sws_dst_w   != out_w
+        || s->sws_dst_h   != out_h) {
+        sws_freeContext(s->sws);
+        s->sws = sws_getContext(
+            s->frame->width, s->frame->height, s->frame->format,
+            out_w, out_h, AV_PIX_FMT_RGBA,
+            SWS_BILINEAR, NULL, NULL, NULL);
+        if (!s->sws) { av_frame_unref(s->frame); return AVERROR(ENOMEM); }
+        s->sws_src_w   = s->frame->width;
+        s->sws_src_h   = s->frame->height;
+        s->sws_src_fmt = s->frame->format;
+        s->sws_dst_w   = out_w;
+        s->sws_dst_h   = out_h;
+    }
+    uint8_t *dst_data[1]   = { dst_rgba };
+    int      dst_stride[1] = { out_w * 4 };
+    sws_scale(s->sws,
+              (const uint8_t *const *)s->frame->data, s->frame->linesize,
+              0, s->frame->height, dst_data, dst_stride);
+    s->width  = s->frame->width;
+    s->height = s->frame->height;
+    av_frame_unref(s->frame);
+    return 0;
+}
+
 /*
  * Decode the next frame and copy it out in its native pixel format, packed
  * tightly (align=1) the same way FFmpeg's rawvideo encoder / framecrc muxer
@@ -510,39 +523,21 @@ int decoder_next_raw_frame(int handle, uint8_t *dst, int dst_cap)
         return AVERROR(EINVAL);
     DecodeSession *s = &g_dec[handle];
 
-    for (;;) {
-        int ret = avcodec_receive_frame(s->codec_ctx, s->frame);
-        if (ret == 0) {
-            int w = s->frame->width, h = s->frame->height;
-            enum AVPixelFormat fmt = s->frame->format;
-            int size = av_image_get_buffer_size(fmt, w, h, 1);
-            if (size < 0)        { av_frame_unref(s->frame); return size; }
-            if (size > dst_cap)  { av_frame_unref(s->frame); return AVERROR(ENOMEM); }
-            av_image_copy_to_buffer(dst, dst_cap,
-                (const uint8_t *const *)s->frame->data, s->frame->linesize,
-                fmt, w, h, 1);
-            s->width  = w;
-            s->height = h;
-            av_frame_unref(s->frame);
-            return size;
-        }
-        if (ret != AVERROR(EAGAIN)) return ret == AVERROR_EOF ? 0 : ret;
+    int ret = decoder_pump(s);
+    if (ret != 0) return ret == 1 ? 0 : ret;   /* EOF -> 0, error passes through */
 
-        for (;;) {
-            ret = av_read_frame(s->fmt_ctx, s->pkt);
-            if (ret < 0) {
-                avcodec_send_packet(s->codec_ctx, NULL);
-                break;
-            }
-            if (s->pkt->stream_index == s->video_stream) {
-                ret = avcodec_send_packet(s->codec_ctx, s->pkt);
-                av_packet_unref(s->pkt);
-                if (ret < 0) return ret;
-                break;
-            }
-            av_packet_unref(s->pkt);
-        }
-    }
+    int w = s->frame->width, h = s->frame->height;
+    enum AVPixelFormat fmt = s->frame->format;
+    int size = av_image_get_buffer_size(fmt, w, h, 1);
+    if (size < 0)       { av_frame_unref(s->frame); return size; }
+    if (size > dst_cap) { av_frame_unref(s->frame); return AVERROR(ENOMEM); }
+    av_image_copy_to_buffer(dst, dst_cap,
+        (const uint8_t *const *)s->frame->data, s->frame->linesize,
+        fmt, w, h, 1);
+    s->width  = w;
+    s->height = h;
+    av_frame_unref(s->frame);
+    return size;
 }
 
 EMSCRIPTEN_KEEPALIVE
