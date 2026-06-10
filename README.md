@@ -167,6 +167,15 @@ per-codec breakdown lives in [COMPAT.md](COMPAT.md). The main formats:
 | **Audio encode** | AAC, Opus, FLAC, MP2, WavPack, PCM variants |
 | **Containers** | MP4, MKV, WebM, AVI, OGG, MPEG-TS, FLV, ASF, WAV, FLAC, and more |
 
+### How we measure it
+
+wasmpeg runs against FFmpeg's own FATE sample suite on two axes:
+
+- **Coverage** ([COMPAT.md](COMPAT.md)) — does a file decode without erroring? Currently **86.9%** of 1242 tests.
+- **Correctness** ([CORRECTNESS.md](CORRECTNESS.md)) — does the decode match FFmpeg byte-for-byte? Each frame's checksum is compared to FFmpeg's vendored reference output. Currently **92%** of the pure-decode video tests.
+
+The second number is the one that matters: it's not "does it run," it's "does it produce the exact right pixels." Both are tracked over time in [tests/results/](tests/results/).
+
 ---
 
 ## Building from source
