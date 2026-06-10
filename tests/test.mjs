@@ -14,6 +14,7 @@ import { fileURLToPath }  from 'url';
 import { deflateSync }    from 'zlib';
 import path from 'path';
 import fs   from 'fs';
+import { parseArgs } from '../src/js/exec.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT      = path.join(__dirname, '..');
@@ -432,6 +433,24 @@ async function testGpu(cpuJsPath) {
     ok('decoder.close() does not crash', true);
 }
 
+function testArgParser() {
+    section('exec arg parser / flag tables');
+
+    // Boolean flags must not swallow the following token.
+    const re = parseArgs(['-re', '-i', 'in.mp4']);
+    ok('-re is boolean, -i still parses its input', re.inputs[0]?.url === 'in.mp4');
+
+    const copyts = parseArgs(['-i', 'in.mp4', '-copyts', 'out.mp4']);
+    ok('-copyts is boolean, output still parses', copyts.outputs[0]?.url === 'out.mp4');
+
+    // Value flags must consume their argument, not leave it as an output.
+    const vsync = parseArgs(['-i', 'in.mp4', '-vsync', '2', 'out.mp4']);
+    ok('-vsync consumes its value', vsync.outputs.length === 1 && vsync.outputs[0]?.url === 'out.mp4');
+
+    const async_ = parseArgs(['-i', 'in.mp4', '-async', '1', 'out.mp4']);
+    ok('-async consumes its value', async_.outputs.length === 1 && async_.outputs[0]?.url === 'out.mp4');
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -443,6 +462,7 @@ await testPipelineEdgeCases(cpuJs);
 await testDecoderApi(cpuJs);
 await testFFmpegClass(cpuJs);
 await testGpu(cpuJs);
+testArgParser();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);

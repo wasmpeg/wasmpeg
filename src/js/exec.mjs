@@ -26,11 +26,11 @@ const VALUE_FLAGS = new Set([
     '-metadata', '-disposition',
     '-loglevel', '-v',
     '-threads', '-filter_threads',
-    '-stream_loop', '-re', '-itsoffset', '-itsscale',
+    '-stream_loop', '-itsoffset', '-itsscale',
     '-frames', '-q', '-qscale',
     '-profile', '-level',
     '-bsf', '-bsf:v', '-bsf:a',
-    '-copyts', '-start_at_zero',
+    '-vsync', '-async',
     '-sws_flags', '-flags', '-flags2',
     '-fflags', '-err_detect',
     '-max_error_rate',
@@ -45,7 +45,7 @@ const BOOL_FLAGS = new Set([
     '-an', '-vn', '-sn',
     '-copyinkf', '-noaccurate_seek',
     '-accurate_seek', '-shortest',
-    '-vsync', '-async',
+    '-re', '-copyts', '-start_at_zero',
     '-auto_conversion_filters',
 ]);
 
