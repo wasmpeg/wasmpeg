@@ -1,4 +1,4 @@
-.PHONY: all verify build build-cpu build-webgpu test fate size clean
+.PHONY: all verify build build-cpu build-webgpu test fate fate-parse size clean
 
 all: build
 
@@ -13,6 +13,7 @@ build-webgpu:
 
 verify:
 	node tests/test.mjs
+	node tests/fate-runner.mjs
 	node tests/fate.mjs
 
 test:
@@ -20,6 +21,9 @@ test:
 
 fate:
 	node tests/fate.mjs
+
+fate-parse:
+	node tests/fate-runner.mjs
 
 size:
 	bash tests/size.sh

@@ -191,3 +191,6 @@ if (failures.length && !VERBOSE) {
     }
     if (failures.length > 20) console.log(`  … and ${failures.length - 20} more`);
 }
+
+// Fail the run if any CMD that should parse didn't — this gates `make verify`.
+process.exit(failures.length ? 1 : 0);
