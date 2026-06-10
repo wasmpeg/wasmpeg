@@ -49,10 +49,18 @@ if (!isMainThread) {
         const h   = cc('decoder_height', 'number', ['number'], [handle]);
         const buf = mod._malloc(w * h * 4);
 
+        let frames = 0;
         for (;;) {
             const r = cc('decoder_next_frame', 'number', ['number','number','number','number'], [handle, buf, w, h]);
             if (r === 1) break;
-            if (r < 0) { mod._free(buf); cc('decoder_close', null, ['number'], [handle]); throw new Error(`next_frame: ${r}`); }
+            if (r < 0) {
+                mod._free(buf); cc('decoder_close', null, ['number'], [handle]);
+                // treat errors mid-stream as soft-EOF when at least one frame decoded
+                // (FATE sample files are truncated; empty packets can produce ENOSPC/INVALIDDATA)
+                if (frames > 0) return;
+                throw new Error(`next_frame: ${r}`);
+            }
+            frames++;
         }
 
         mod._free(buf);
