@@ -96,6 +96,10 @@ const PRESETS = {
             'imc', 'truespeech', 'cook', 'ra_144', 'ra_288',
             'qcelp', 'g728', 'twinvq', 'dolby_e', 'dst',
             'mpc7', 'mpc8',
+            // Apple MACE (QuickTime legacy audio)
+            'mace3', 'mace6',
+            // Escape codecs (RPL/ARMovie containers)
+            'escape124', 'escape130',
         ],
         encoders: [
             // video
@@ -142,6 +146,10 @@ const PRESETS = {
             // additional containers for FATE niche audio tests
             'aea', 'brstm', 'bfstm', 'dsf', 'mpc', 'qcp', 'tta', 'vqf', 'xwma',
             'shorten', 'g728', 's337m',
+            // Sony OMA/AA3 (ATRAC3/ATRAC3+ in OpenMG containers)
+            'oma',
+            // ARMovie/RPL container (Escape 124/130 video codecs)
+            'rpl',
             // image pipes — one per format, needed for auto-detection of bare image files
             'image2', 'image2pipe',
             'image_png_pipe', 'image_bmp_pipe', 'image_gif_pipe',
