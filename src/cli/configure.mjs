@@ -67,6 +67,14 @@ const PRESETS = {
             'vp4', 'vp5', 'mimic', 'mdec', 'eamad', 'eatgq', 'sgirle',
             'nuv', 'rv60', 'thp', 'txd', 'mts2', 'avui', 'avrn', 'cavs',
             'roqvideo', 'dirac',
+            // more legacy / game / multimedia video
+            'dfa', 'brender_pix', 'paf_video', 'vmdvideo', 'fits', 'fourxm',
+            'jv', 'vb', 'ansi', 'dxa', 'aasc', 'qpeg', 'sp5x', 'motionpixels',
+            'mvc1', 'mvc2', 'rl2', 'c93', 'cdgraphics', 'bethsoftvid', 'bfi',
+            'tmv', 'tdsc', 'cscd', 'kmvc', 'qdraw', 'smc', 'rpza', 'pixlet',
+            'idcin', 'dsicinvideo', 'smacker', 'bmv_video',
+            // raw packed-pixel formats (.avi / .mov)
+            'r210', 'v210', 'v410', 'r10k',
             // images
             'png', 'apng', 'gif', 'bmp', 'tiff', 'webp', 'tga', 'targa', 'dpx', 'xbm',
             'sunrast', 'xface',
@@ -113,6 +121,9 @@ const PRESETS = {
             'mace3', 'mace6',
             // Escape codecs (RPL/ARMovie containers)
             'escape124', 'escape130',
+            // game / multimedia + lossless audio
+            'qoa', 'tak', 'smackaud', 'paf_audio', 'vmdaudio', 'bmv_audio',
+            'dsicinaudio', 'dss_sp', 'msnsiren', 'dsd_lsbf', 'dsd_msbf',
         ],
         encoders: [
             // video
@@ -148,6 +159,9 @@ const PRESETS = {
             'dnxhd',
             // containers for the legacy/game video decoders above
             'nuv', 'thp', 'txd', 'mv', 'cavsvideo', 'apng', 'dirac',
+            'dfa', 'paf', 'vmd', 'fits', 'qoa', 'bmv', 'dsicin', 'smacker',
+            'jv', 'siff', 'ipmovie', 'dss', 'tak', 'rl2', 'c93', 'cdg',
+            'bethsoftvid', 'bfi', 'tmv', 'mm', 'idcin', 'yop', 'ea_cdata', 'flic',
             // EA (Electronic Arts) container — used for VP6 in ea-vp6 test files
             'ea',
             // E-AC-3 bare stream
