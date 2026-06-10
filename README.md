@@ -1,9 +1,8 @@
 # wasmpeg
 
 **FFmpeg for the browser, built for the decode → display loop.** Load a video, get
-RGBA frames, scale them on the GPU, probe metadata, grab thumbnails — in a package
-~5× smaller than `@ffmpeg/ffmpeg`, with **no SharedArrayBuffer and no COOP/COEP
-headers** required.
+RGBA frames, scale them on the GPU, probe metadata, grab thumbnails — from a 2.9 MB
+gzipped WASM, with **no SharedArrayBuffer and no COOP/COEP headers** required.
 
 ```js
 import wasmpeg from 'wasmpeg';
@@ -19,19 +18,10 @@ while ((frame = dec.nextFrame())) {
 dec.close();
 ```
 
-| | wasmpeg | `@ffmpeg/ffmpeg` |
-|---|---------|------------------|
-| WASM size | **~5 MB** | ~35 MB |
-| SharedArrayBuffer | **Not required** | Required (v0.12+) |
-| COOP/COEP headers | **Not required** | Required (v0.12+) |
-| Cross-origin isolation | **Not required** | Required |
-| WebGPU-accelerated scale | **Yes** | No |
-| Frame-by-frame decode API | **Yes** | No (CLI only) |
-| Full ffmpeg CLI / transcode | No | Yes |
-
-> wasmpeg is optimized for **decode, scale, probe, and thumbnail** workloads. It is
-> not a general-purpose ffmpeg CLI — if you need full transcoding pipelines, see
-> [Migrating from ffmpeg.wasm](#migrating-from-ffmpegwasm) for when to use which.
+wasmpeg focuses on the decode side: pulling frames, audio, and metadata out of media
+files, plus single-frame encode for thumbnails. It runs in modern browsers and in
+Node ≥ 18, loads without cross-origin isolation, and scales frames on the GPU when
+WebGPU is available (falling back to CPU otherwise).
 
 ---
 
@@ -42,8 +32,7 @@ npm install wasmpeg          # LGPL — safe for commercial / closed-source
 npm install wasmpeg-full     # GPL  — adds H.264/H.265 encode (libx264/libx265)
 ```
 
-No build step, no special server headers, no worker setup. Works in modern browsers
-and in Node ≥ 18.
+No build step, no special server headers, no worker setup.
 
 ---
 
@@ -124,39 +113,28 @@ const png = await wasmpeg.encode(canvas, { fmt: 'image2', codec: 'png' });
 
 ---
 
-## Migrating from ffmpeg.wasm
+## Familiar FFmpeg class API
 
-wasmpeg ships an `FFmpeg` class that mirrors the `@ffmpeg/ffmpeg` v0.12 shape, so the
-load / virtual-FS / event surface you already know works the same:
+Alongside the high-level API, wasmpeg ships an `FFmpeg` class with a load /
+virtual-filesystem / event surface:
 
 ```js
 import { FFmpeg } from 'wasmpeg';
 
 const ff = new FFmpeg();
 ff.on('log', ({ message }) => console.log(message));
-await ff.load();                 // no coreURL / workerURL / toBlobURL dance
+await ff.load();
 
 await ff.writeFile('input.mp4', data);
 const frame = await ff.exec(['-i', 'input.mp4', '-vf', 'scale=1280:720']);
 ```
 
-**What carries over unchanged:** `new FFmpeg()`, `load()`, `on()`/`off()` for `'log'`
-and `'progress'`, `writeFile`, `readFile`, `deleteFile`, `createDir`, `listDir`,
-`terminate()`. No `SharedArrayBuffer`, no cross-origin isolation, no
-`toBlobURL`/`coreURL` setup.
+It supports `new FFmpeg()`, `load()`, `on()`/`off()` for `'log'` and `'progress'`,
+`writeFile`, `readFile`, `deleteFile`, `createDir`, `listDir`, and `terminate()`.
 
-**What's different:** wasmpeg's `exec()` runs the **decode + filter** pipeline and
-*returns* the result (RGBA pixels for a filter op, or a decoder for a decode-only
-command). It does **not** transcode to an output file the way the real CLI does.
-`exec([...]); readFile('out.mp4')` will not produce `out.mp4`.
-
-| You want to… | Use |
-|--------------|-----|
-| Decode, scale, thumbnail, probe in the browser — small & fast | **wasmpeg** |
-| Full transcode pipelines, arbitrary CLI flags, muxing to a file | stay on **ffmpeg.wasm** |
-
-For most "show this video / extract a frame / resize" use cases, wasmpeg replaces
-ffmpeg.wasm at a fraction of the size. For heavy transcoding, the two coexist fine.
+`exec()` runs the decode + filter pipeline and returns the result: RGBA pixels for a
+filter op, or a decoder for a decode-only command. It does not transcode to an output
+file, so `exec([...]); readFile('out.mp4')` will not produce `out.mp4`.
 
 ---
 
@@ -168,7 +146,7 @@ need:
 | Import | Level | Use when |
 |--------|-------|----------|
 | `import wasmpeg from 'wasmpeg'` | High | You have a `File`/`Blob`/`URL`/canvas and want frames, audio, metadata, or a thumbnail. **Start here.** |
-| `import { FFmpeg } from 'wasmpeg'` | Compat | You're porting ffmpeg.wasm code and want the familiar `load`/`writeFile`/`exec` surface. |
+| `import { FFmpeg } from 'wasmpeg'` | Compat | You want the `load`/`writeFile`/`exec` surface and a virtual filesystem. |
 | `import { gpu } from 'wasmpeg'` | Low | You already have raw bytes or RGBA in hand and want zero-overhead `createDecoder` / `createEncoder` / `scale` with manual lifecycle control. |
 
 See [docs/api.md](docs/api.md) for the full reference, including the underlying C ABI.
