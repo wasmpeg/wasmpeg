@@ -55,6 +55,8 @@ const PRESETS = {
             'theora', 'vp3', 'vp6', 'vp6a', 'vp6f', 'vp7', 'rv10', 'rv20', 'rv30', 'rv40',
             'flashsv', 'flashsv2', 'cinepak', 'msvideo1',
             'fraps', 'cdxl', 'flic', 'zmbv', 'cllc', 'hq_hqa', 'hqx', 'speedhq',
+            // Intel Indeo, LOCO, Microsoft RLE, DV — legacy AVI/MOV video
+            'indeo2', 'indeo3', 'indeo4', 'indeo5', 'loco', 'msrle', 'dvvideo',
             // images
             'png', 'gif', 'bmp', 'tiff', 'webp', 'tga', 'dpx', 'xbm',
             'jpeg2000', 'jpegls', 'exr', 'psd',
@@ -113,7 +115,7 @@ const PRESETS = {
         ],
         demuxers: [
             // major containers
-            'mov', 'matroska', 'avi', 'ogg', 'asf', 'flv', 'rm', 'mxf',
+            'mov', 'matroska', 'avi', 'ogg', 'asf', 'flv', 'rm', 'mxf', 'dv',
             // audio containers
             'mp3', 'wav', 'flac', 'aac', 'ac3', 'dts', 'truehd', 'mlp',
             'amr', 'g722', 'g726', 'gsm',
