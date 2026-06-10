@@ -93,6 +93,23 @@ behavior) over adding routing tricks to the harness that inflate the number with
 making the shipped library any better. A fix should help a real user, not just the
 test.
 
+## Maintenance tasks
+
+Check WASM size against `@ffmpeg/core` after a build:
+
+```sh
+bash tests/size.sh        # raw + gzip size of dist/*.wasm vs @ffmpeg/core unpackaged
+```
+
+Pull a newer FFmpeg release into `vendor/ffmpeg`:
+
+```sh
+bash scripts/bump-ffmpeg.sh n8.2     # git subtree pull to the tag, then `make verify`
+```
+
+The bump touches the ~62 glue lines we carry in `vendor/ffmpeg/`. Resolve any
+conflicts on those lines before committing.
+
 ## Commits & pull requests
 
 - **Atomic commits.** One logical change per commit; split unrelated changes.
