@@ -100,9 +100,19 @@ Frame rate as a rational number. 29.97 fps → `fps_num=30000, fps_den=1001`. Re
 int decoder_next_frame(int handle, uint8_t *out_rgba, int dst_w, int dst_h);
 ```
 
-Decodes the next frame, scales it to `dst_w × dst_h`, and writes RGBA8 pixels into `out_rgba`. The buffer must be pre-allocated at `dst_w * dst_h * 4` bytes.
+Decodes the next frame, scales it to `dst_w × dst_h`, and writes RGBA8 pixels into `out_rgba`. The buffer must be pre-allocated at `dst_w * dst_h * 4` bytes. Pass `dst_w`/`dst_h` of `0` to keep the frame's native size.
 
-Returns `1` on success, `0` at end of stream, negative `AVERROR` on error.
+Returns `0` on success, `1` at end of stream, negative `AVERROR` on error.
+
+#### `decoder_next_raw_frame`
+
+```c
+int decoder_next_raw_frame(int handle, uint8_t *dst, int dst_cap);
+```
+
+Decodes the next frame and copies it out in its **native pixel format**, packed tightly (alignment 1) — the same byte layout FFmpeg's rawvideo encoder and `framecrc` muxer use. Unlike `decoder_next_frame`, it does no scaling or RGBA conversion, so the output can reproduce FATE reference checksums exactly (this is what `tests/fate.mjs` uses).
+
+Returns the byte count written (`> 0`) on success, `0` at end of stream, negative `AVERROR` on error. Size `dst` at `width * height * 8` to fit any pixel format; the function returns `AVERROR(ENOMEM)` if `dst_cap` is too small.
 
 #### `decoder_close`
 

@@ -62,6 +62,16 @@ if (!someCondition) {
 
 When adding a new C export, add it to `DECODER_EXPORTS` or `CPU_EXPORTS` in `scripts/build.sh` and relink before testing. See the [API reference](api.md#c-api) for `ccall` type mappings.
 
+## FATE reports
+
+Two reports run a `gpl-cpu` build against FFmpeg's FATE sample suite. They don't gate commits — they track where the library stands over time.
+
+**Coverage** (`make compat` → [COMPAT.md](../COMPAT.md)) decodes each FATE sample and records whether it ran without erroring, bucketed by codec.
+
+**Correctness** (`make fate` → [CORRECTNESS.md](../CORRECTNESS.md)) is stricter. For each pure-decode video `framecrc` test it decodes every frame via `decoder_next_raw_frame` (native pixel format), takes the per-frame Adler-32, and compares it to FFmpeg's vendored reference in `vendor/ffmpeg/tests/ref/fate/`. A test passes only when every frame is byte-identical. No native ffmpeg is needed — the reference files match the vendored FFmpeg version, so this is FFmpeg's own pass/fail.
+
+Both accept `--filter=<codec>` to run one bucket and `--no-save` to skip writing the report. Each run appends a row to `tests/results/`, so progress is visible in git history.
+
 ## What isn't tested
 
 **Real video and audio** — H.264, HEVC, VP9, AAC, Opus. Generating valid compressed test vectors in pure JS isn't practical, and the `ffmpeg` CLI isn't compiled into the WASM binary. PNG covers the decoder pipeline because it can be constructed from scratch in pure JS. Real video tests would require shipping binary fixture files.
