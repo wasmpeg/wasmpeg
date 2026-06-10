@@ -124,9 +124,9 @@ function parseSamplePath(cmd) {
 }
 
 function isPureDecode(cmd) {
-    const toks = cmd.trim().split(/\s+/);
-    for (const tok of toks) {
+    for (let tok of cmd.trim().split(/\s+/)) {
         if (!tok.startsWith('-')) continue;
+        tok = tok.replace(/^-\//, '-');   // FATE writes output options as -/opt
         const base = tok.indexOf(':') > 0 ? tok.slice(0, tok.indexOf(':')) : tok;
         if (TRANSFORM_FLAGS.has(tok) || TRANSFORM_FLAGS.has(base)) return false;
     }
@@ -182,6 +182,7 @@ function loadTests() {
             if (!cm || !lastName) continue;
             const cmd = cm[1].trim();
             if (cmd.split(/\s+/)[0] !== 'framecrc') continue;
+            if (lastName.startsWith('fate-filter-')) continue;   // filtergraph tests aren't pure decode
             if (!isPureDecode(cmd)) continue;
 
             const samplePath = parseSamplePath(cmd);
