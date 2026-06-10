@@ -129,7 +129,9 @@ if (!isMainThread) {
             mod._free(ptr);
             const probeWidth = ph >= 0 ? cc('probe_width', 'number', ['number'], [ph]) : -1;
             if (ph >= 0) cc('probe_close', null, ['number'], [ph]);
-            const hasVideo = probeWidth > 0 || EXT_VIDEO.has(ext);
+            // pcm/audio_match tests always expect audio output — don't let a video
+            // track in the container (e.g. binkaudio bik files) hijack the route
+            const hasVideo = t.type !== 'audio' && (probeWidth > 0 || EXT_VIDEO.has(ext));
 
             if (hasVideo)   decodeVideo(bytes);
             else            decodeAudio(bytes, fmtHint);
