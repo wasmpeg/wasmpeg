@@ -1,8 +1,8 @@
 # FATE Compatibility
 
-Last run: **2026-06-10** · commit `3eadcb4f2b` · WASM **7058 KB**
+Last run: **2026-06-10** · commit `edcde15f14` · WASM **7236 KB**
 
-## Overall: 1012/1242 (81.5%)
+## Overall: 1079/1242 (86.9%)
 
 | Codec | Type | Pass | Total | Rate |
 |-------|------|-----:|------:|-----:|
@@ -23,7 +23,7 @@ Last run: **2026-06-10** · commit `3eadcb4f2b` · WASM **7058 KB**
 | dolby_e | audio | 2 | 2 | 100.0% |
 | dpx | video | 2 | 2 | 100.0% |
 | dsf | audio | 0 | 1 | 0.0% |
-| dts | audio | 6 | 7 | 85.7% |
+| dts | video | 6 | 7 | 85.7% |
 | exr | video | 74 | 74 | 100.0% |
 | flac | video | 2 | 2 | 100.0% |
 | g722 | video | 1 | 1 | 100.0% |
@@ -48,8 +48,8 @@ Last run: **2026-06-10** · commit `3eadcb4f2b` · WASM **7058 KB**
 | musepack | audio | 2 | 4 | 50.0% |
 | nellymoser | audio | 1 | 1 | 100.0% |
 | opus | video | 1 | 1 | 100.0% |
-| other | video | 207 | 364 | 56.9% |
-| pcm | video | 34 | 63 | 54.0% |
+| other | video | 271 | 364 | 74.5% |
+| pcm | video | 36 | 63 | 57.1% |
 | png | video | 10 | 10 | 100.0% |
 | prores | video | 12 | 12 | 100.0% |
 | psd | video | 7 | 7 | 100.0% |
@@ -70,7 +70,7 @@ Last run: **2026-06-10** · commit `3eadcb4f2b` · WASM **7058 KB**
 | tta | audio | 1 | 2 | 50.0% |
 | twinvq | audio | 1 | 1 | 100.0% |
 | utvideo | video | 23 | 23 | 100.0% |
-| vc1 | video | 4 | 11 | 36.4% |
+| vc1 | video | 5 | 11 | 45.5% |
 | vorbis | audio | 23 | 23 | 100.0% |
 | vp3 | video | 1 | 1 | 100.0% |
 | vp6 | video | 9 | 9 | 100.0% |
