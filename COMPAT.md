@@ -1,8 +1,8 @@
 # FATE Compatibility
 
-Last run: **2026-06-10** · commit `b5cc9e38ca` · WASM **6612 KB**
+Last run: **2026-06-10** · commit `9942de5a8a` · WASM **6696 KB**
 
-## Overall: 924/1242 (74.4%)
+## Overall: 934/1242 (75.2%)
 
 | Codec | Type | Pass | Total | Rate |
 |-------|------|-----:|------:|-----:|
@@ -23,7 +23,7 @@ Last run: **2026-06-10** · commit `b5cc9e38ca` · WASM **6612 KB**
 | dolby_e | audio | 2 | 2 | 100.0% |
 | dpx | video | 2 | 2 | 100.0% |
 | dsf | audio | 0 | 1 | 0.0% |
-| dts | video | 6 | 7 | 85.7% |
+| dts | audio | 6 | 7 | 85.7% |
 | exr | video | 74 | 74 | 100.0% |
 | flac | video | 2 | 2 | 100.0% |
 | g722 | video | 1 | 1 | 100.0% |
@@ -48,7 +48,7 @@ Last run: **2026-06-10** · commit `b5cc9e38ca` · WASM **6612 KB**
 | musepack | audio | 2 | 4 | 50.0% |
 | nellymoser | audio | 1 | 1 | 100.0% |
 | opus | video | 1 | 1 | 100.0% |
-| other | video | 124 | 364 | 34.1% |
+| other | video | 134 | 364 | 36.8% |
 | pcm | video | 29 | 63 | 46.0% |
 | png | video | 10 | 10 | 100.0% |
 | prores | video | 12 | 12 | 100.0% |
