@@ -1,8 +1,8 @@
 # FATE Compatibility
 
-Last run: **2026-06-10** · commit `9942de5a8a` · WASM **6696 KB**
+Last run: **2026-06-10** · commit `3eadcb4f2b` · WASM **7058 KB**
 
-## Overall: 934/1242 (75.2%)
+## Overall: 1012/1242 (81.5%)
 
 | Codec | Type | Pass | Total | Rate |
 |-------|------|-----:|------:|-----:|
@@ -48,8 +48,8 @@ Last run: **2026-06-10** · commit `9942de5a8a` · WASM **6696 KB**
 | musepack | audio | 2 | 4 | 50.0% |
 | nellymoser | audio | 1 | 1 | 100.0% |
 | opus | video | 1 | 1 | 100.0% |
-| other | video | 134 | 364 | 36.8% |
-| pcm | video | 29 | 63 | 46.0% |
+| other | video | 207 | 364 | 56.9% |
+| pcm | video | 34 | 63 | 54.0% |
 | png | video | 10 | 10 | 100.0% |
 | prores | video | 12 | 12 | 100.0% |
 | psd | video | 7 | 7 | 100.0% |
