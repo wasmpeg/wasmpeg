@@ -1,13 +1,13 @@
 # FATE Decode Correctness
 
-Last run: **2026-06-10** · commit `3eadcb4f2b`
+Last run: **2026-06-10** · commit `edcde15f14`
 
 Exact per-frame Adler-32 match against FFmpeg's vendored FATE reference output,
 over pure-decode video `framecrc` tests. A test passes only when every frame is
 byte-identical to the reference. This is stricter than [COMPAT.md](COMPAT.md),
 which only checks that decoding runs without erroring.
 
-## Overall: 392/427 (91.8%)
+## Overall: 392/426 (92%)
 
 | Codec | Correct | Total | Rate |
 |-------|--------:|------:|-----:|
@@ -27,7 +27,7 @@ which only checks that decoding runs without erroring.
 | lagarith | 7 | 8 | 87.5% |
 | loco | 2 | 2 | 100.0% |
 | magicyuv | 7 | 7 | 100.0% |
-| mjpeg | 2 | 3 | 66.7% |
+| mjpeg | 2 | 2 | 100.0% |
 | mpeg2 | 1 | 2 | 50.0% |
 | mpeg4 | 2 | 3 | 66.7% |
 | mss2 | 3 | 3 | 100.0% |
