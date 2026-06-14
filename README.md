@@ -104,11 +104,11 @@ aud.close();
 ### Grab a thumbnail / encode frames
 
 ```js
-// First-frame JPEG thumbnail:
-const jpg = await wasmpeg.encode(file, { fmt: 'image2', codec: 'mjpeg', frames: 1 });
+// First-frame JPEG thumbnail (image2pipe is the default container):
+const jpg = await wasmpeg.encode(file, { codec: 'mjpeg', frames: 1 });
 
 // Encode a canvas straight to PNG:
-const png = await wasmpeg.encode(canvas, { fmt: 'image2', codec: 'png' });
+const png = await wasmpeg.encode(canvas, { codec: 'png' });
 ```
 
 ---
