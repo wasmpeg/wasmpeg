@@ -233,7 +233,10 @@ export async function exec(input, args) {
     await gpu.load();
 
     const parsed = parseArgs(args);
-    const outOpts = parsed.outputs[0]?.options ?? {};
+    // Options apply whether or not an output file is named: `-vf scale=…` with no
+    // output token lands in `global`, while `-i in -vf scale=… out.png` lands in
+    // the output's options. Merge both so either form works.
+    const outOpts = { ...parsed.global, ...(parsed.outputs[0]?.options ?? {}) };
 
     // ── resolve video filter ──────────────────────────────────────────────────
     const vf = outOpts['-vf'] ?? outOpts['-filter:v'];
