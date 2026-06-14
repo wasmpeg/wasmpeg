@@ -76,9 +76,9 @@ Both accept `--filter=<codec>` to run one bucket and `--no-save` to skip writing
 
 **Real video and audio** — H.264, HEVC, VP9, AAC, Opus. Generating valid compressed test vectors in pure JS isn't practical, and the `ffmpeg` CLI isn't compiled into the WASM binary. PNG covers the decoder pipeline because it can be constructed from scratch in pure JS. Real video tests would require shipping binary fixture files.
 
-**WebGPU scale** — requires a live GPU context, which Node.js doesn't provide. This is tested manually in a browser.
+**WebGPU scale** — requires a live GPU context, which Node.js doesn't provide. Test it manually with `tests/bench.html` (CPU vs WebGPU scale benchmark) and `tests/browser-test.html` (the `gpu` / `FFmpeg` / `wasmpeg` API surface), served over HTTP so the WASM and WebGPU load.
 
-**Encoder pipeline** — the pipeline currently handles decode and scale only; there's no encoder stage yet.
+**Encoder over real video** — `encode()` and the C encoder (`encoder_open` / `encoder_push_rgba` / `encoder_finish`) are covered for single-frame image output in `test.mjs`, but multi-frame video/audio muxing isn't exercised in the suite yet.
 
 ## Debugging failures
 
