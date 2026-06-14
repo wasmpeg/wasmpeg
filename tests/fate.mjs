@@ -28,8 +28,9 @@ const SAMPLES_DIR = process.env.FATE_SAMPLES ?? path.join(ROOT, 'fate-suite');
 const FATE_DIR    = path.join(ROOT, 'vendor/ffmpeg/tests/fate');
 const REF_DIR     = path.join(ROOT, 'vendor/ffmpeg/tests/ref/fate');
 const RESULTS_DIR = path.join(ROOT, 'tests/results');
-const wasmJs      = path.join(ROOT, 'dist/gpl-cpu.js');
-const wasmBin     = path.join(ROOT, 'dist/gpl-cpu.wasm');
+const WASM_BUILD  = process.env.WASM_BUILD ?? 'gpl-cpu';   // e.g. WASM_BUILD=cpu
+const wasmJs      = path.join(ROOT, `dist/${WASM_BUILD}.js`);
+const wasmBin     = path.join(ROOT, `dist/${WASM_BUILD}.wasm`);
 
 // FFmpeg's framecrc muxer checksums each frame with Adler-32 seeded at 0.
 function adler32(buf) {

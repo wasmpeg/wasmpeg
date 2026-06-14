@@ -21,8 +21,9 @@ const ROOT        = path.resolve(import.meta.dirname, '..');
 const SAMPLES_DIR = process.env.FATE_SAMPLES ?? path.join(ROOT, 'fate-suite');
 const FATE_DIR    = path.join(ROOT, 'vendor/ffmpeg/tests/fate');
 const RESULTS_DIR = path.join(ROOT, 'tests/results');
-const wasmJs      = path.join(ROOT, 'dist/gpl-cpu.js');
-const wasmBin     = path.join(ROOT, 'dist/gpl-cpu.wasm');
+const WASM_BUILD  = process.env.WASM_BUILD ?? 'gpl-cpu';   // e.g. WASM_BUILD=cpu
+const wasmJs      = path.join(ROOT, `dist/${WASM_BUILD}.js`);
+const wasmBin     = path.join(ROOT, `dist/${WASM_BUILD}.wasm`);
 
 // ── worker: decode a chunk of tests ──────────────────────────────────────────
 
