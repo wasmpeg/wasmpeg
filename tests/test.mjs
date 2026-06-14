@@ -471,6 +471,13 @@ async function testHighLevel() {
 
     const info = await wasmpeg.probe(png);
     ok('probe() reports a video stream', info.video.width === 8 && info.video.height === 8);
+
+    // encode() must produce a valid image, not throw (it was broken by an int64
+    // pts arg and a missing pipe muxer).
+    const jpg = await wasmpeg.encode(png, { codec: 'mjpeg', frames: 1 });
+    ok('encode() to mjpeg produces output', jpg.length > 0 && jpg[0] === 0xFF && jpg[1] === 0xD8);
+    const outPng = await wasmpeg.encode(png, { codec: 'png', frames: 1 });
+    ok('encode() to png produces a PNG', outPng.length > 0 && outPng[0] === 0x89 && outPng[1] === 0x50);
 }
 
 // ── run ──────────────────────────────────────────────────────────────────────
