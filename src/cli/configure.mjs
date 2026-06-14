@@ -212,7 +212,7 @@ const PRESETS = {
         protocols: ['file'],
         filters: [
             'scale', 'crop', 'overlay', 'aresample',
-            'hstack', 'vstack', 'format', 'transpose', 'rotate',
+            'hflip', 'vflip', 'hstack', 'vstack', 'format', 'transpose', 'rotate',
             'pad', 'trim', 'setpts', 'fps', 'split', 'colorspace',
             'eq', 'hue', 'curves', 'colorbalance', 'colorchannelmixer',
             'noise', 'unsharp', 'boxblur', 'gblur',
