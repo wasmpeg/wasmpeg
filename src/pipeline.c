@@ -999,7 +999,7 @@ int encoder_open(const char *fmt_name, const char *codec_name,
  * Returns 0 on success, negative AVERROR on failure.
  */
 EMSCRIPTEN_KEEPALIVE
-int encoder_push_rgba(int handle, const uint8_t *rgba, int w, int h, int64_t pts_ms)
+int encoder_push_rgba(int handle, const uint8_t *rgba, int w, int h, int pts_ms)
 {
     if (handle < 0 || handle >= MAX_ENCODER_SESSIONS || !g_enc[handle].active)
         return AVERROR(EINVAL);

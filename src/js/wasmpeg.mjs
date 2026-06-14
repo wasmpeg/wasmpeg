@@ -133,7 +133,9 @@ async function encode(input, opts = {}) {
     }
 
     const enc = gpu.createEncoder({
-        fmt:     opts.fmt   ?? 'image2',
+        // image2pipe writes a single stream to our in-memory IO; image2 wants
+        // numbered files on a real filesystem and can't be used here.
+        fmt:     opts.fmt   ?? 'image2pipe',
         codec:   opts.codec ?? 'mjpeg',
         width:   srcW,
         height:  srcH,

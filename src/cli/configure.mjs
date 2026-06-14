@@ -200,7 +200,7 @@ const PRESETS = {
         muxers: [
             'mp4', 'webm', 'ogg', 'matroska', 'avi', 'flv', 'asf',
             'mpegts', 'wav', 'flac', 'ac3', 'adts', 'opus', 'truehd',
-            'image2', 'null',
+            'image2', 'image2pipe', 'mjpeg', 'apng', 'gif', 'webp', 'null',
             'pcm_s16le', 'pcm_f32le', 'pcm_mulaw', 'pcm_alaw',
         ],
         parsers: [
