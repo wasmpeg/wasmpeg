@@ -15,6 +15,7 @@ import { deflateSync }    from 'zlib';
 import path from 'path';
 import fs   from 'fs';
 import { parseArgs } from '../src/js/exec.mjs';
+import wasmpeg from '../src/js/wasmpeg.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT      = path.join(__dirname, '..');
@@ -451,6 +452,27 @@ function testArgParser() {
     ok('-async consumes its value', async_.outputs.length === 1 && async_.outputs[0]?.url === 'out.mp4');
 }
 
+async function testHighLevel() {
+    section('high-level wasmpeg API');
+
+    await wasmpeg.load();
+    const png = new Uint8Array(makeTinyPng(8, 8));
+
+    // Regression: scale() must return RGBA pixels, not a decoder. The filter
+    // options live in `global` (no output token), which exec() has to honour.
+    const px = await wasmpeg.scale(png, 4, 4);
+    ok('scale() returns a pixel array', px instanceof Uint8ClampedArray);
+    ok('scale() output is 4*4*4 bytes', px.length === 4 * 4 * 4);
+
+    const dec = await wasmpeg.decode(png);
+    ok('decode() returns a frame iterator', typeof dec.nextFrame === 'function');
+    ok('decode() reports width 8', dec.width === 8);
+    dec.close();
+
+    const info = await wasmpeg.probe(png);
+    ok('probe() reports a video stream', info.video.width === 8 && info.video.height === 8);
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -463,6 +485,7 @@ await testDecoderApi(cpuJs);
 await testFFmpegClass(cpuJs);
 await testGpu(cpuJs);
 testArgParser();
+await testHighLevel();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
