@@ -480,6 +480,24 @@ async function testHighLevel() {
     ok('encode() to png produces a PNG', outPng.length > 0 && outPng[0] === 0x89 && outPng[1] === 0x50);
 }
 
+// ── 8. Public export surface ─────────────────────────────────────────────────
+
+async function testExportSurface() {
+    section('Public export surface');
+
+    const mod = await import('../src/js/index.js');
+
+    ok('default export is the high-level API',
+        typeof mod.default === 'object' && mod.default !== null);
+    for (const fn of ['load', 'scale', 'decode', 'decodeAudio', 'probe', 'encode', 'run'])
+        ok(`default.${fn} is callable`, typeof mod.default?.[fn] === 'function');
+
+    ok('FFmpeg export is a constructor',       typeof mod.FFmpeg === 'function');
+    ok('gpu export is an object',              typeof mod.gpu === 'object' && mod.gpu !== null);
+    ok('exec export is callable',              typeof mod.exec === 'function');
+    ok('named wasmpeg export is the default',  mod.wasmpeg === mod.default);
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -493,6 +511,7 @@ await testFFmpegClass(cpuJs);
 await testGpu(cpuJs);
 testArgParser();
 await testHighLevel();
+await testExportSurface();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
