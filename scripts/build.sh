@@ -21,6 +21,14 @@ else
     OUT_PREFIX=""
 fi
 
+if ! command -v emcc >/dev/null 2>&1; then
+    echo "error: emcc not found on PATH." >&2
+    echo "       source the Emscripten SDK first, e.g.:" >&2
+    echo "         source ~/emsdk/emsdk_env.sh" >&2
+    echo "       See docs/building.md for the pinned version." >&2
+    exit 1
+fi
+
 DECODER_EXPORTS="_decoder_open,_decoder_open_format,_decoder_open_file,_decoder_width,_decoder_height,_decoder_fps_num,_decoder_fps_den,_decoder_next_frame,_decoder_next_raw_frame,_decoder_close"
 AUDIO_EXPORTS="_audio_open,_audio_open_format,_audio_channels,_audio_sample_rate,_audio_next_samples,_audio_close"
 PROBE_EXPORTS="_probe_open,_probe_format_name,_probe_duration_ms,_probe_stream_count,_probe_stream_type,_probe_width,_probe_height,_probe_fps_num,_probe_fps_den,_probe_sample_rate,_probe_channels,_probe_bitrate,_probe_close"
