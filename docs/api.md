@@ -1,5 +1,24 @@
 # API Reference
 
+## JS log subscription
+
+The module's stdout/stderr are shared by every consumer of the loaded binary.
+
+```js
+import { gpu } from 'wasmpeg';
+await gpu.load();
+
+const unsubscribe = gpu.onLog(({ type, message }) => {
+    // type is 'stdout' or 'stderr'
+    console.log(`[${type}] ${message}`);
+});
+
+unsubscribe();          // or gpu.offLog(handler)
+```
+
+`FFmpeg`'s `on('log')` and `on('progress')` are built on this, so both surfaces
+observe the same stream without loading a second module.
+
 ## C API
 
 All exported functions are decorated with `EMSCRIPTEN_KEEPALIVE` and listed in `scripts/build.sh`. Source: `src/pipeline.c`.

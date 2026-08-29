@@ -10,15 +10,14 @@ PRESET=standard TARGET=cpu bash scripts/build.sh
 node tests/test.mjs
 ```
 
-A clean build produces:
+A clean build ends with a summary line:
 
 ```
-Pass: 63
-Fail: 0
-Skip: 1
+183 tests — 182 passed, 0 failed, 1 skipped
 ```
 
-The skip is the WebGPU bench test — it only runs when `dist/webgpu.js` is present.
+The count grows as tests are added; what matters is `0 failed`. The skip is the
+WebGPU bench test, which only runs when `dist/webgpu.js` is present.
 
 ## Test layout
 
