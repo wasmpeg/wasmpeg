@@ -5,8 +5,13 @@ on:
     types: [opened, synchronize, reopened, labeled]
 
 jobs:
+  # a label-add re-fires this whole workflow but changes no commits — dco and
+  # quality only depend on commits, so skip them on that event instead of
+  # re-running the same check for free.
   dco:
-    if: "!contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump')"
+    if: |
+      github.event.action != 'labeled' &&
+      !contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +33,9 @@ jobs:
           exit $missing
 
   quality:
-    if: "!contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump')"
+    if: |
+      github.event.action != 'labeled' &&
+      !contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
