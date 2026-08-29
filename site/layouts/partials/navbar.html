@@ -1,0 +1,25 @@
+<nav class="navbar is-fixed-top is-dark" role="navigation" aria-label="main navigation">
+  <div class="container">
+    <input type="checkbox" id="nav-toggle" class="navbar-toggle">
+    <div class="navbar-brand">
+      <a class="navbar-item has-text-weight-bold" href="/">wasmpeg</a>
+      <label for="nav-toggle" class="navbar-burger" aria-label="menu" aria-expanded="false">
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+      </label>
+    </div>
+    <div id="navMenu" class="navbar-menu">
+      <div class="navbar-start">
+        {{ range .Site.Menus.main }}
+        <a class="navbar-item" href="{{ .URL }}">{{ .Name }}</a>
+        {{ end }}
+      </div>
+      <div class="navbar-end">
+        <a class="navbar-item" href="{{ .Site.Params.githubRepo }}">
+          <span class="icon"><i class="fab fa-github"></i></span>&nbsp;GitHub
+        </a>
+      </div>
+    </div>
+  </div>
+</nav>

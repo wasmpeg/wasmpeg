@@ -1,0 +1,24 @@
+{{ $all := slice }}
+{{ range (site.GetPage "/docs").Sections.ByWeight }}
+  {{ range .RegularPages.ByWeight }}{{ $all = $all | append . }}{{ end }}
+  {{ range .Sections.ByWeight }}{{ range .RegularPages.ByWeight }}{{ $all = $all | append . }}{{ end }}{{ end }}
+{{ end }}
+{{ range (site.GetPage "/docs").RegularPages.ByWeight }}{{ $all = $all | append . }}{{ end }}
+{{ $idx := -1 }}
+{{ range $i, $p := $all }}{{ if eq $p.RelPermalink $.RelPermalink }}{{ $idx = $i }}{{ end }}{{ end }}
+{{ if ge $idx 0 }}
+<nav class="prev-next" aria-label="Page navigation">
+  {{ if gt $idx 0 }}{{ $p := index $all (sub $idx 1) }}
+  <a class="pn pn-prev" href="{{ $p.RelPermalink }}">
+    <span class="pn-label">Previous</span>
+    <strong class="pn-title">{{ $p.Title }}</strong>
+  </a>
+  {{ else }}<div class="pn-empty"></div>{{ end }}
+  {{ if lt $idx (sub (len $all) 1) }}{{ $n := index $all (add $idx 1) }}
+  <a class="pn pn-next" href="{{ $n.RelPermalink }}">
+    <span class="pn-label">Next</span>
+    <strong class="pn-title">{{ $n.Title }}</strong>
+  </a>
+  {{ end }}
+</nav>
+{{ end }}

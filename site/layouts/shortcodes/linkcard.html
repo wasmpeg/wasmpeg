@@ -1,0 +1,4 @@
+<a class="card link-card" href="{{ .Get "href" }}">
+  <p class="card-title">{{ .Get "title" }}{{ partial "icon.html" "arrow-right" }}</p>
+  {{ with .Get "description" }}<p class="card-body">{{ . }}</p>{{ end }}
+</a>

@@ -1,0 +1,7 @@
+{{ define "main" }}
+<div class="wrap section prose narrow">
+  <h1>{{ .Title }}</h1>
+  {{ with .Date }}<p class="post-date">{{ .Format "2 January 2006" }}</p>{{ end }}
+  {{ .Content }}
+</div>
+{{ end }}

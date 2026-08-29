@@ -1,0 +1,8 @@
+{{- $label := .Get "label" | default (.Get 0) -}}
+{{- $group := .Get "group" -}}
+{{- $id := printf "%s-%d" $group .Ordinal -}}
+<input type="radio" name="{{ $group }}" id="{{ $id }}" class="tab-radio"{{ if eq (.Get "first") "true" }} checked{{ end }}>
+<label for="{{ $id }}" class="tab-label">{{ $label }}</label>
+<div class="tab-panel">
+{{ .Inner | markdownify }}
+</div>

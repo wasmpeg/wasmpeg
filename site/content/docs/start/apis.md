@@ -1,0 +1,127 @@
+---
+title: "The three APIs"
+description: "wasmpeg exposes one library at three levels of abstraction — high-level, FFmpeg-compat, and low-level typed pipeline. Pick the lowest one you need."
+weight: 40
+---
+wasmpeg exposes one library at three levels of abstraction over the same WASM core.
+Pick the **lowest** one you need.
+
+| Import | Level | Use when |
+|--------|-------|----------|
+| `import wasmpeg from 'wasmpeg'` | **High** | You have a `File`/`Blob`/`URL`/canvas and want frames, audio, metadata, or a thumbnail. **Start here.** |
+| `import { FFmpeg } from 'wasmpeg'` | **Compat** | You want the `load`/`writeFile`/`exec` surface and a virtual filesystem (migrating from `@ffmpeg/ffmpeg`). |
+| `import { gpu } from 'wasmpeg'` | **Low** | You already have raw bytes or RGBA in hand and want zero-overhead `createDecoder` / `createEncoder` / `scale` with manual lifecycle control. |
+
+The three aren't separate libraries — they're views onto the same WASM module. Every call,
+at every level, ends in the same exported C functions. Higher levels add convenience (input
+normalization, format hints, automatic cleanup); lower levels strip it away for control and
+a little less overhead. They also interoperate: load any one of them and the module is ready
+for all three.
+
+## High-level — `wasmpeg`
+
+The default export. Every method accepts any input type and handles buffer management,
+format hinting, and the JS↔WASM boundary for you. This is the right choice for almost
+all application code.
+
+```js
+
+await wasmpeg.load();
+const dec = await wasmpeg.decode(file);
+```
+
+What it adds over the lower levels:
+
+- **Any input type** — `File`, `Blob`, URL, `Uint8Array`/`ArrayBuffer`, and (in the browser)
+  `HTMLVideoElement` / `HTMLCanvasElement` / `ImageData`, normalized for you.
+- **Format inference** — a filename or URL is mapped to a demuxer hint automatically, with a
+  `{ format }` override when you need it.
+- **Automatic cleanup** — `probe`, `scale`, and `encode` manage their own session slots; only
+  the `decode`/`decodeAudio` iterators are yours to close.
+
+Methods: `load`, `decode`, `decodeAudio`, `probe`, `scale`, `encode`, `run`.
+
+{{< cardgrid >}}
+{{< linkcard title="High-level reference" href="/docs/reference/high-level/" description="" >}}
+{{< /cardgrid >}}
+
+## Compat — `FFmpeg` class
+
+A drop-in-shaped replacement for `@ffmpeg/ffmpeg` v0.12: `new FFmpeg()`, `load()`,
+`on('log')` / `on('progress')`, `writeFile`/`readFile`/`deleteFile`, `createDir`/
+`listDir`, `exec()`, and `terminate()`. Use it to port an existing ffmpeg.wasm snippet
+with minimal edits, or when you want the virtual filesystem.
+
+```js
+
+const ff = new FFmpeg();
+ff.on('log', ({ message }) => console.log(message));
+await ff.load();
+await ff.writeFile('input.mp4', data);
+const frame = await ff.exec(['-i', 'input.mp4', '-vf', 'scale=1280:720']);
+```
+
+The class keeps a real virtual filesystem: `writeFile` lands the bytes in WASM FS,
+`exec(['-i', 'input.mp4', ...])` reads that path back, and `readFile` / `listDir` /
+`deleteFile` work as expected. Log lines come through `on('log', ({ type, message }) => …)`
+with `type` of `stdout` or `stderr`; a coarse `on('progress')` fires off `time=` markers in
+the log stream.
+
+{{< aside type="caution" >}}
+`exec()` runs the **decode + filter** pipeline and returns the result (RGBA pixels for a
+filter op, or a decoder for a decode-only command). It does **not** transcode to an
+output file — `exec([...]); readFile('out.mp4')` will not produce `out.mp4`.
+{{< /aside >}}
+
+This is the place migrations most often hit the decode-only boundary. If your original
+snippet ended by reading an output file off the FS, that step has no equivalent here — take
+the pixels or decoder that `exec()` returns instead. The compat surface mirrors the *shape*
+of ffmpeg.wasm, not its transcoding.
+
+{{< cardgrid >}}
+{{< linkcard title="FFmpeg class reference" href="/docs/reference/ffmpeg-class/" description="" >}}
+{{< /cardgrid >}}
+
+## Low-level — `gpu`
+
+The typed pipeline that the higher levels are built on. You pass `Uint8Array` bytes or
+RGBA buffers directly and manage decoder/encoder lifecycles yourself. No input
+normalization, no format inference — maximum control, minimum overhead.
+
+```js
+
+await gpu.load();
+const dec = gpu.createDecoder(new Uint8Array(mp4Bytes));
+const frame = dec.nextFrame();
+dec.close();
+```
+
+Reach for `gpu` when you already hold the bytes (so input normalization buys you nothing),
+when you want to keep a decoder open across many calls, or when you're driving the encoder
+frame by frame. The surface covers `createDecoder` / `createDecoderFile`,
+`createAudioDecoder`, `probe`, `createEncoder` (with `pushRgba` / `finish` / `close`),
+`scale`, and the WebGPU helpers `hasWebGPU` / `benchGpu` / `benchCpu`. Because nothing is
+inferred, you pass the demuxer name yourself when a format needs one, and you own every
+`close()`.
+
+{{< cardgrid >}}
+{{< linkcard title="gpu namespace reference" href="/docs/reference/gpu/" description="" >}}
+{{< /cardgrid >}}
+
+## Choosing a level
+
+- Reach for **high-level** unless you have a concrete reason not to. It's the documented,
+  tested path for application code.
+- Drop to **`gpu`** when you already hold raw bytes or RGBA, want to keep one decoder alive
+  across many calls, or are pushing frames into the encoder yourself.
+- Use the **`FFmpeg` class** mainly to port `@ffmpeg/ffmpeg` code, or when the virtual
+  filesystem fits how your code is already organized.
+
+You can mix them in one app — they share the module — but within a single task, staying at
+one level keeps the lifecycle rules simple.
+
+## Below all three — the C ABI
+
+Every JS layer ultimately calls `EMSCRIPTEN_KEEPALIVE` functions exported from
+`src/pipeline.c` via `ccall`. If you're embedding the raw WASM module yourself, the
+[C ABI reference](/docs/reference/c-abi/) documents every exported function.

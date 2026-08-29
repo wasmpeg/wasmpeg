@@ -1,0 +1,223 @@
+---
+title: "Frameworks"
+description: "Wire wasmpeg into your stack — Vite, Next.js, Vue, Svelte, or Node — with the install, the one WASM-serving gotcha, and a working example for each."
+weight: 60
+---
+The API is the same everywhere; only the wiring differs. Pick your stack below. The one thing
+that trips people up in every bundler is **serving the `.wasm`** — the package's `dist/cpu.js`
+loads `cpu.wasm` from the same directory, so if your tool doesn't co-locate them, copy the
+binaries into your static folder and pass an explicit `wasmPath`.
+
+{{< tabs >}}
+{{< tab label="Vite" group="tabgroup-0" first="true" >}}
+Vite serves the package's co-located `.wasm` in dev and emits it on build with no config. This
+applies to any Vite app — vanilla, React, Vue, or Svelte.
+
+```sh
+npm install wasmpeg
+```
+
+A React example (the same logic works in any component):
+
+```jsx
+
+export function Thumbnail({ file }) {
+    const ref = useRef(null);
+    useEffect(() => {
+        let dec;
+        (async () => {
+            await wasmpeg.load();
+            dec = await wasmpeg.decode(file);
+            const frame = dec.nextFrame();
+            const c = ref.current;
+            c.width = dec.width;
+            c.height = dec.height;
+            c.getContext('2d').putImageData(new ImageData(frame, dec.width, dec.height), 0, 0);
+        })();
+        return () => dec?.close();
+    }, [file]);
+    return <canvas ref={ref} />;
+}
+```
+
+If the browser 404s on `cpu.wasm`, copy the binaries into `public/` and point at them:
+
+```sh
+cp node_modules/wasmpeg/dist/cpu.* public/wasmpeg/
+```
+
+```js
+await wasmpeg.load({ wasmPath: '/wasmpeg/cpu.js' });
+```
+{{< /tab >}}
+
+{{< tab label="Next.js" group="tabgroup-0" >}}
+wasmpeg runs in the browser, so in Next.js it belongs in Client Components. Copy the WASM into
+`public/` (served at the root):
+
+```sh
+npm install wasmpeg
+cp node_modules/wasmpeg/dist/cpu.* public/wasmpeg/
+```
+
+```tsx
+'use client';
+
+export function Thumbnail({ file }: { file: File }) {
+    const ref = useRef<HTMLCanvasElement>(null);
+    useEffect(() => {
+        let dec: Awaited<ReturnType<typeof wasmpeg.decode>> | undefined;
+        (async () => {
+            await wasmpeg.load({ wasmPath: '/wasmpeg/cpu.js' });
+            dec = await wasmpeg.decode(file);
+            const frame = dec.nextFrame()!;
+            const c = ref.current!;
+            c.width = dec.width;
+            c.height = dec.height;
+            c.getContext('2d')!.putImageData(new ImageData(frame, dec.width, dec.height), 0, 0);
+        })();
+        return () => dec?.close();
+    }, [file]);
+    return <canvas ref={ref} />;
+}
+```
+
+For server-side thumbnails, use a Route Handler on the Node runtime:
+
+```ts
+// app/api/thumbnail/route.ts
+
+export const runtime = 'nodejs';
+
+export async function POST(req: Request) {
+    const bytes = new Uint8Array(await req.arrayBuffer());
+    await wasmpeg.load();
+    const jpg = await wasmpeg.encode(bytes, { codec: 'mjpeg', frames: 1 });
+    return new Response(jpg, { headers: { 'Content-Type': 'image/jpeg' } });
+}
+```
+
+{{< aside type="caution" >}}
+Keep `import wasmpeg` behind `'use client'` (or inside a Route Handler). Use the **nodejs**
+runtime, not edge — wasmpeg needs Node's `fs`/`fetch` to load the `.wasm`.
+{{< /aside >}}
+{{< /tab >}}
+
+{{< tab label="Vue" group="tabgroup-0" >}}
+```sh
+npm install wasmpeg
+```
+
+```vue
+<script setup>
+
+const props = defineProps({ file: { type: Object, required: true } });
+const canvas = ref(null);
+let dec;
+
+onMounted(async () => {
+    await wasmpeg.load();
+    dec = await wasmpeg.decode(props.file);
+    const frame = dec.nextFrame();
+    canvas.value.width = dec.width;
+    canvas.value.height = dec.height;
+    canvas.value.getContext('2d')
+        .putImageData(new ImageData(frame, dec.width, dec.height), 0, 0);
+});
+onBeforeUnmount(() => dec?.close());
+</script>
+
+<template><canvas ref="canvas" /></template>
+```
+
+Share one loaded module across components with a composable:
+
+```js
+// useWasmpeg.js
+
+let ready;
+export function useWasmpeg() {
+    ready ??= wasmpeg.load();
+    return { wasmpeg, ready };
+}
+```
+
+If the WASM 404s: `cp node_modules/wasmpeg/dist/cpu.* public/wasmpeg/` then
+`wasmpeg.load({ wasmPath: '/wasmpeg/cpu.js' })`.
+{{< /tab >}}
+
+{{< tab label="Svelte" group="tabgroup-0" >}}
+```sh
+npm install wasmpeg
+```
+
+```svelte
+<script>
+    import { onMount, onDestroy } from 'svelte';
+    import wasmpeg from 'wasmpeg';
+    export let file;
+    let canvas, dec;
+
+    onMount(async () => {
+        await wasmpeg.load();
+        dec = await wasmpeg.decode(file);
+        const frame = dec.nextFrame();
+        canvas.width = dec.width;
+        canvas.height = dec.height;
+        canvas.getContext('2d')
+            .putImageData(new ImageData(frame, dec.width, dec.height), 0, 0);
+    });
+    onDestroy(() => dec?.close());
+</script>
+
+<canvas bind:this={canvas} />
+```
+
+In SvelteKit, decoding must stay client-side — `onMount` only runs in the browser, so that's
+the safe place. For server thumbnails, use a `+server.js` endpoint on the Node adapter. If the
+WASM 404s: `cp node_modules/wasmpeg/dist/cpu.* static/wasmpeg/` then
+`wasmpeg.load({ wasmPath: '/wasmpeg/cpu.js' })` (SvelteKit serves `static/` at the root).
+{{< /tab >}}
+
+{{< tab label="Node.js" group="tabgroup-0" >}}
+The same API runs in Node ≥ 18 — no browser, no native addons. Node has no WebGPU adapter, so
+the CPU build is always used and the `.wasm` is read from disk.
+
+```sh
+npm install wasmpeg
+```
+
+```js
+
+await wasmpeg.load();
+
+const bytes = await readFile('clip.mp4');
+const info = await wasmpeg.probe(bytes);
+console.log(info.duration, info.video.width, info.video.height);
+
+// thumbnail to disk
+const jpg = await wasmpeg.encode(bytes, { codec: 'mjpeg', width: 640, height: 360, frames: 1 });
+await writeFile('thumb.jpg', jpg);
+```
+
+{{< aside type="note" >}}
+The package is **ESM-only** — use `"type": "module"` or a `.mjs` file (from CommonJS:
+`const { default: wasmpeg } = await import('wasmpeg')`). Inputs are `Uint8Array`/`ArrayBuffer`
+or an `http(s)` URL — not `File` or canvas. Load once at startup and reuse the module; just
+`close()` every decoder so you don't exhaust the session slots under load.
+{{< /aside >}}
+{{< /tab >}}
+{{< /tabs >}}
+
+## The WASM-serving rule, once
+
+Whatever the framework, the fix for a `cpu.wasm` 404 is identical: make sure the `.wasm` sits
+next to the `.js` that loads it. Either let the bundler co-locate them (Vite does), or copy
+`node_modules/wasmpeg/dist/cpu.*` into your static directory and pass
+`load({ wasmPath: '/your/path/cpu.js' })`. See
+[Troubleshooting](/docs/guides/troubleshooting/#the-wasm-fails-to-load) if it still doesn't resolve.
+
+{{< aside type="tip" >}}
+Decoding is CPU-bound and synchronous. For long media, run it in a Web Worker so the main
+thread stays responsive — the API is identical inside a worker.
+{{< /aside >}}

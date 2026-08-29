@@ -1,0 +1,44 @@
+<footer class="site-footer">
+  <div class="footer-grid">
+    <div class="footer-brand">
+      <a class="brand" href="/"><span class="brand-mark">w</span><span class="brand-name">wasmpeg</span></a>
+      <p>{{ .Site.Params.description }}</p>
+    </div>
+    <div class="footer-col">
+      <h4>Documentation</h4>
+      <ul>
+        <li><a href="/docs/start/introduction/">Introduction</a></li>
+        <li><a href="/docs/start/installation/">Installation</a></li>
+        <li><a href="/docs/start/quick-start/">Quick start</a></li>
+        <li><a href="/docs/start/how-it-works/">How it works</a></li>
+        <li><a href="/docs/reference/high-level/">API reference</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Formats & FATE</h4>
+      <ul>
+        <li><a href="/docs/formats/codecs/">Codec support</a></li>
+        <li><a href="/docs/formats/filters/">Filter library</a></li>
+        <li><a href="/docs/formats/compatibility/">FATE benchmark</a></li>
+        <li><a href="/docs/webgpu/">WebGPU roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Project</h4>
+      <ul>
+        <li><a href="{{ .Site.Params.githubRepo }}" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a href="{{ .Site.Params.githubTracking }}" target="_blank" rel="noopener">Tracking</a></li>
+        <li><a href="{{ .Site.Params.githubRepo }}/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a></li>
+        <li><a href="/blog/">Blog</a></li>
+        <li><a href="mailto:{{ .Site.Params.contactEmail }}">Contact</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bot">
+    <p><strong>{{ .Site.Params.npmPackage }}</strong> is released under {{ .Site.Params.license }}.
+    <strong>{{ .Site.Params.npmPackageFull }}</strong> is released under {{ .Site.Params.licenseFull }}.<br>
+    FFmpeg is a trademark of Fabrice Bellard and the FFmpeg project contributors. wasmpeg is not affiliated with or endorsed by FFmpeg.<br>
+    Found a bug, or have a proposal? Email <a href="mailto:{{ .Site.Params.contactEmail }}">{{ .Site.Params.contactEmail }}</a> or
+    <a href="{{ .Site.Params.githubRepo }}/issues" target="_blank" rel="noopener">open an issue</a>.</p>
+  </div>
+</footer>

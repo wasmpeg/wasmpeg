@@ -1,0 +1,7 @@
+{{- $pages := where .Site.RegularPages "Section" "in" (slice "docs" "blog") -}}
+[
+{{- range $i, $p := $pages -}}
+{{ if $i }},{{ end }}
+{"t":{{ $p.Title | jsonify }},"u":{{ $p.RelPermalink | jsonify }},"d":{{ $p.Description | jsonify }},"s":{{ with $p.Parent }}{{ .Title | jsonify }}{{ else }}""{{ end }},"c":{{ $p.Plain | truncate 1200 "" | jsonify }}}
+{{- end -}}
+]

@@ -1,0 +1,6 @@
+{{- $icon := .Get "icon" -}}
+<div class="card">
+  {{ with $icon }}<span class="card-icon">{{ partial "icon.html" . }}</span>{{ end }}
+  <p class="card-title">{{ .Get "title" }}</p>
+  <div class="card-body">{{ .Inner | markdownify }}</div>
+</div>

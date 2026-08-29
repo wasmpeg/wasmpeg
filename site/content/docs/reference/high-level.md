@@ -1,0 +1,312 @@
+---
+title: "High-level — wasmpeg"
+description: "Complete reference for the default wasmpeg export — load, scale, decode, decodeAudio, probe, encode, run — with parameters, return shapes, and examples for each."
+weight: 10
+---
+```js
+
+```
+
+The default export. Accepts any JS input type — `File`, `Blob`, `URL` string,
+`Uint8Array`, `ArrayBuffer`, `HTMLVideoElement`, `HTMLCanvasElement`, `ImageData` — and
+handles buffer management and format inference for you. Source: `src/js/wasmpeg.mjs`.
+
+## Accepted input types
+
+Every method takes the same `input` union. Normalization happens in `normalizeInput`
+(`src/js/exec.mjs`):
+
+- `File` / `Blob` — read into memory; a `File`'s `.name` is used for the format hint (a plain
+  `Blob` has none).
+- `URL` string (`http://`, `https://`) — fetched; the URL pathname is used for the hint. A failed
+  fetch throws.
+- Absolute path string (starts with `/`) — treated as a WASM virtual-filesystem path. Only
+  `decode` and `encode` accept this; `decodeAudio` and `probe` reject it.
+- `Uint8Array` / `ArrayBuffer` — used as-is.
+- `HTMLVideoElement` / `HTMLCanvasElement` / `ImageData` — read as raw RGBA pixels (valid only for
+  `scale` and `encode`; the others throw). A video element must be loaded, or it throws
+  `video element has no dimensions`.
+
+Anything else throws `Unsupported input type`.
+
+## load
+
+Loads and initializes the WASM module.
+
+### Signature
+
+```js
+await wasmpeg.load(opts?)
+```
+
+### Parameters
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `opts.wasmPath` | string | Optional path to the module's `.js`; the matching `.wasm` must sit beside it. |
+
+### Behavior
+
+Resolves a promise; safe to call multiple times (later calls resolve immediately). In a
+browser with WebGPU it loads the WebGPU build, otherwise the CPU build. Every other method
+throws `call wasmpeg.load() first` until this resolves.
+
+### Example
+
+```js
+await wasmpeg.load();
+await wasmpeg.load({ wasmPath: '/static/wasmpeg/cpu.js' });
+```
+
+## scale
+
+Decodes the first frame (or takes raw pixels) and runs a filtergraph.
+
+### Signature
+
+```js
+await wasmpeg.scale(input, dstW, dstH, filter?)
+```
+
+### Parameters
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `input` | input | Any accepted input type. |
+| `dstW` / `dstH` | number | Target dimensions, used to build the default `scale=` filter. |
+| `filter` | string | Optional FFmpeg filtergraph. Output size is read from its `scale=`. |
+
+### Returns
+
+A `Uint8ClampedArray` of RGBA8 pixels, length `dstW * dstH * 4`.
+
+### Example
+
+```js
+const rgba = await wasmpeg.scale(file, 1280, 720);
+const fx   = await wasmpeg.scale(file, 1280, 720, 'scale=1280:720,hflip');
+```
+
+See the [scale & filter guide](/docs/guides/scale-filter/) and the [filter reference](/docs/formats/filters/).
+
+## decode
+
+Opens a video decoder.
+
+### Signature
+
+```js
+await wasmpeg.decode(input, { format }?)
+```
+
+### Parameters
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `input` | input | Any accepted input except raw pixels. |
+| `format` | string | Optional demuxer name to force (for formats that don't content-probe). |
+
+### Returns
+
+A [Decoder object](#decoder-object). Throws on raw-pixel input — use `scale()` for that.
+
+### Description
+
+For byte inputs the demuxer is content-probed unless you pass `format` or the source name maps to
+a known non-probing format (the hint table in `src/js/formats.js`). An absolute-path input is
+opened from the WASM filesystem with the `image2` demuxer, which is the reliable path for
+single-frame images.
+
+### Example
+
+```js
+const dec = await wasmpeg.decode(file);
+const dec = await wasmpeg.decode(bytes, { format: 'dnxhd' });
+```
+
+See the [decode video guide](/docs/guides/decode-video/).
+
+### Decoder object
+
+The object returned by `decode()`.
+
+#### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `width` | number | Frame width in pixels. |
+| `height` | number | Frame height in pixels. |
+| `fps` | number | `fps_num / fps_den`. |
+
+#### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `nextFrame(dstW?, dstH?)` | `Uint8ClampedArray` \| `null` | Next RGBA8 frame, optionally scaled; `null` at end of stream. |
+| `close()` | `void` | Frees the session slot. |
+
+## decodeAudio
+
+Opens an audio decoder.
+
+### Signature
+
+```js
+await wasmpeg.decodeAudio(input, { format }?)
+```
+
+### Parameters
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `input` | input | Bytes, `File`/`Blob`, or URL. Raw pixels and FS paths throw. |
+| `format` | string | Optional demuxer name to force. |
+
+### Returns
+
+An [AudioDecoder object](#audiodecoder-object). Decoded samples are interleaved 32-bit float at
+the source's sample rate and channel count.
+
+### Example
+
+```js
+const aud = await wasmpeg.decodeAudio(file);
+```
+
+See the [decode audio guide](/docs/guides/decode-audio/).
+
+### AudioDecoder object
+
+#### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `channels` | number | Channel count. |
+| `sampleRate` | number | Sample rate in Hz. |
+
+#### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `nextSamples()` | `Float32Array` \| `null` | Interleaved f32 samples; `null` at end of stream. |
+| `close()` | `void` | Frees the session slot. |
+
+## probe
+
+Reads container metadata without decoding frames.
+
+### Signature
+
+```js
+await wasmpeg.probe(input)
+```
+
+### Parameters
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `input` | input | Bytes, `File`/`Blob`, or URL. Raw pixels and FS paths throw. |
+
+### Returns
+
+```js
+{
+  format:   string,        // demuxer name, e.g. "mov,mp4,m4a,3gp,3g2,mj2"
+  duration: number|null,   // seconds, null if unknown
+  bitrate:  number,        // overall bitrate in kb/s (-1 if unknown)
+  streams:  [{ index: number, type: string }],   // type: video|audio|data|subtitle|attachment|unknown
+  video:    { width, height, fpsNum, fpsDen },   // each field -1 if no video stream
+  audio:    { sampleRate, channels },            // each field -1 if no audio stream
+}
+```
+
+`video` and `audio` always exist; their fields are `-1` when that stream type is absent.
+`duration` is `null` rather than `-1` when unknown.
+
+### Example
+
+```js
+const info = await wasmpeg.probe(file);
+```
+
+See the [probe guide](/docs/guides/probe/) for field-by-field detail.
+
+## encode
+
+Encodes frames (or raw pixels) and returns container bytes.
+
+### Signature
+
+```js
+await wasmpeg.encode(input, opts?)
+```
+
+### Parameters
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `codec` | `'mjpeg'` | Encoder name. |
+| `fmt` | `'image2pipe'` | Container/muxer. |
+| `width` / `height` | source size | Output dimensions. |
+| `fps` | `30` | Frame rate (number or `{num,den}`). |
+| `bitrate` | `0` | Bits/s (`0` = codec default). |
+| `frames` | all | Max frames to encode (decoded-input path only). |
+| `format` | inferred | Force the **input** demuxer (used only when the input is bytes, not raw pixels or an FS path). |
+
+### Returns
+
+A `Uint8Array` of the encoded container bytes.
+
+### Description
+
+For raw-pixel input (canvas, video element, `ImageData`) it encodes that one frame. For a
+decoded input it opens a decoder, scales each frame to `width`/`height`, and pushes frames at
+`fps` until end of stream or `frames` is reached. The default container is `image2pipe` with the
+`mjpeg` codec — a single-stream image grab. `image2` won't work here; it needs numbered files on a
+real filesystem. The decoder and encoder are always closed, even on error.
+
+### Example
+
+```js
+const jpg = await wasmpeg.encode(file, { codec: 'mjpeg', frames: 1 });
+const png = await wasmpeg.encode(canvas, { codec: 'png' });
+```
+
+See the [encode guide](/docs/guides/encode/).
+
+## run
+
+Low-level escape hatch — passes an FFmpeg-style arg array straight to the dispatcher.
+
+### Signature
+
+```js
+await wasmpeg.run(input, args)
+```
+
+### Parameters
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `input` | input | Any accepted input type. |
+| `args` | string[] | FFmpeg-style argument array. |
+
+### Returns
+
+RGBA pixels for a filter op, or a [Decoder object](#decoder-object) for a decode-only
+command. See the [command reference](/docs/reference/exec-commands/) for the full surface.
+
+### Example
+
+```js
+const rgba = await wasmpeg.run(file, ['-vf', 'scale=640:360,hflip']);
+```
+
+## Memory and lifecycle
+
+Buffer management is automatic at this level, but decoder lifecycles are not. Video and audio
+decoders each draw from a pool of 8 WASM session slots — always call `close()` when done, or a
+long-lived page can exhaust them and the next open throws
+[`ENOMEM` (-12)](/docs/reference/errors/#enomem--12-during-normal-use). `scale`, `probe`, and `encode`
+open and close their own sessions internally, so only `decode`/`decodeAudio` hand you something to
+close. To manage memory and lifecycles yourself, drop to the [`gpu` namespace](/docs/reference/gpu/).

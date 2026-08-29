@@ -1,0 +1,35 @@
+{{- $kind := .Get "type" | default "compat" -}}
+{{- $d := cond (eq $kind "correctness") .Site.Data.correctness .Site.Data.compat -}}
+{{- $rows := sort $d.codecs "total" "desc" -}}
+<div class="compat">
+  <div class="compat-head">
+    <div>
+      <div class="compat-rate">{{ $d.rate }}%</div>
+      <div class="compat-sub">{{ $d.pass }} of {{ $d.total }} tests</div>
+    </div>
+    <div class="compat-meta">
+      Last run {{ $d.date }}<br>commit <code>{{ $d.commit }}</code>
+    </div>
+  </div>
+  <table class="compat-table">
+    <thead>
+      <tr><th>Codec</th>{{ if ne $kind "correctness" }}<th>Type</th>{{ end }}<th class="num">Pass</th><th class="num">Total</th><th>Rate</th></tr>
+    </thead>
+    <tbody>
+      {{ range $rows }}
+      {{- $rate := .rate -}}
+      {{- $tone := cond (ge $rate 95.0) "ok" (cond (ge $rate 80.0) "good" (cond (ge $rate 50.0) "warn" "bad")) -}}
+      <tr>
+        <td><code>{{ .codec }}</code></td>
+        {{ if ne $kind "correctness" }}<td class="muted">{{ .type }}</td>{{ end }}
+        <td class="num">{{ if eq $kind "correctness" }}{{ .correct }}{{ else }}{{ .pass }}{{ end }}</td>
+        <td class="num">{{ .total }}</td>
+        <td class="bar-cell">
+          <span class="bar"><span class="bar-fill bar-{{ $tone }}" style="width:{{ $rate }}%"></span></span>
+          <span class="bar-label">{{ .rate }}%</span>
+        </td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>

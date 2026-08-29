@@ -1,0 +1,207 @@
+{
+  "date": "2026-08-29",
+  "commit": "dd3cfeb8a3",
+  "pass": 387,
+  "total": 415,
+  "rate": 93.3,
+  "codecs": [
+    {
+      "codec": "bink",
+      "correct": 2,
+      "total": 2,
+      "rate": 100
+    },
+    {
+      "codec": "bmp",
+      "correct": 1,
+      "total": 1,
+      "rate": 100
+    },
+    {
+      "codec": "canopus",
+      "correct": 3,
+      "total": 3,
+      "rate": 100
+    },
+    {
+      "codec": "cinepak",
+      "correct": 1,
+      "total": 1,
+      "rate": 100
+    },
+    {
+      "codec": "cllc",
+      "correct": 3,
+      "total": 3,
+      "rate": 100
+    },
+    {
+      "codec": "dpx",
+      "correct": 1,
+      "total": 1,
+      "rate": 100
+    },
+    {
+      "codec": "fraps",
+      "correct": 6,
+      "total": 6,
+      "rate": 100
+    },
+    {
+      "codec": "h264",
+      "correct": 175,
+      "total": 177,
+      "rate": 98.9
+    },
+    {
+      "codec": "hap",
+      "correct": 7,
+      "total": 7,
+      "rate": 100
+    },
+    {
+      "codec": "hevc",
+      "correct": 1,
+      "total": 2,
+      "rate": 50
+    },
+    {
+      "codec": "indeo",
+      "correct": 6,
+      "total": 6,
+      "rate": 100
+    },
+    {
+      "codec": "jpeg2000",
+      "correct": 11,
+      "total": 13,
+      "rate": 84.6
+    },
+    {
+      "codec": "jpegls",
+      "correct": 4,
+      "total": 6,
+      "rate": 66.7
+    },
+    {
+      "codec": "lagarith",
+      "correct": 5,
+      "total": 5,
+      "rate": 100
+    },
+    {
+      "codec": "loco",
+      "correct": 2,
+      "total": 2,
+      "rate": 100
+    },
+    {
+      "codec": "magicyuv",
+      "correct": 7,
+      "total": 7,
+      "rate": 100
+    },
+    {
+      "codec": "mjpeg",
+      "correct": 2,
+      "total": 2,
+      "rate": 100
+    },
+    {
+      "codec": "mpeg2",
+      "correct": 1,
+      "total": 2,
+      "rate": 50
+    },
+    {
+      "codec": "mpeg4",
+      "correct": 2,
+      "total": 2,
+      "rate": 100
+    },
+    {
+      "codec": "mss2",
+      "correct": 3,
+      "total": 3,
+      "rate": 100
+    },
+    {
+      "codec": "other",
+      "correct": 82,
+      "total": 93,
+      "rate": 88.2
+    },
+    {
+      "codec": "png",
+      "correct": 6,
+      "total": 6,
+      "rate": 100
+    },
+    {
+      "codec": "psd",
+      "correct": 7,
+      "total": 7,
+      "rate": 100
+    },
+    {
+      "codec": "qtrle",
+      "correct": 2,
+      "total": 2,
+      "rate": 100
+    },
+    {
+      "codec": "svq3",
+      "correct": 0,
+      "total": 1,
+      "rate": 0
+    },
+    {
+      "codec": "tga",
+      "correct": 0,
+      "total": 1,
+      "rate": 0
+    },
+    {
+      "codec": "theora",
+      "correct": 2,
+      "total": 2,
+      "rate": 100
+    },
+    {
+      "codec": "tiff",
+      "correct": 8,
+      "total": 8,
+      "rate": 100
+    },
+    {
+      "codec": "utvideo",
+      "correct": 22,
+      "total": 22,
+      "rate": 100
+    },
+    {
+      "codec": "vc1",
+      "correct": 3,
+      "total": 9,
+      "rate": 33.3
+    },
+    {
+      "codec": "vp3",
+      "correct": 1,
+      "total": 1,
+      "rate": 100
+    },
+    {
+      "codec": "vp6",
+      "correct": 5,
+      "total": 6,
+      "rate": 83.3
+    },
+    {
+      "codec": "webp",
+      "correct": 6,
+      "total": 6,
+      "rate": 100
+    }
+  ]
+}

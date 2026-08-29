@@ -1,0 +1,98 @@
+---
+title: "Error codes"
+description: "What the negative AVERROR values mean, how the JS layers surface them, and the scenario behind each common failure."
+weight: 50
+---
+The C functions return negative `AVERROR` codes on failure. The JS wrappers turn these into
+thrown `Error`s with the numeric code in the message, e.g. `decoder_open failed: -12`. This
+page explains how to read them and what each common one means.
+
+## How they surface
+
+```js
+try {
+    const dec = gpu.createDecoder(bytes);
+} catch (e) {
+    // e.message === "decoder_open failed: -1094995529"
+}
+```
+
+High-level methods (`wasmpeg.decode`, `scale`, …) throw the same way. The number in the
+message is the raw `AVERROR`. In C, `av_strerror(ret, buf, sizeof(buf))` converts any code to
+a readable string.
+
+## POSIX-style codes
+
+These are `AVERROR(errno)` wrappers and have stable, small values.
+
+| Value | Name | Meaning |
+|-------|------|---------|
+| `-1` | — | Sentinel from an **accessor** (`decoder_width`, `probe_bitrate`, …) for an invalid or closed handle. Not an `AVERROR`. |
+| `-2` | `ENOENT` | Path not found in the WASM filesystem (`decoder_open_file`). |
+| `-11` | `EAGAIN` | Decoder needs more input before it can output a frame — internal, normally handled for you. |
+| `-12` | `ENOMEM` | Out of memory, or **all session slots are in use**. The most common one — see below. |
+| `-22` | `EINVAL` | Invalid argument — typically an out-of-range or already-closed handle passed to `decoder_next_frame` / `audio_next_samples` / `encoder_*`, or bad dimensions. |
+
+## Codec & format not found
+
+These mean a required component isn't compiled into your build. The JS message carries the
+numeric `AVERROR`; identify them by the operation that failed.
+
+| Name | When |
+|------|------|
+| `AVERROR_DECODER_NOT_FOUND` | The stream's codec isn't in this build. |
+| `AVERROR_ENCODER_NOT_FOUND` | The encoder you asked for isn't in this build. |
+| `AVERROR_MUXER_NOT_FOUND` | The output container/muxer isn't in this build. |
+| `AVERROR_DEMUXER_NOT_FOUND` | The forced `format` demuxer isn't in this build. |
+| `AVERROR_PROTOCOL_NOT_FOUND` | The `file` protocol isn't compiled in (affects `*_open_file`). |
+
+The default build is broad — check the [codec list](/docs/formats/codecs/). For custom builds, add the
+component to a preset and rebuild ([Configuration](/docs/build/configuration/)).
+
+## Corrupt or unreadable data
+
+| Value | Name | When |
+|-------|------|------|
+| `-1094995529` | `AVERROR_INVALIDDATA` | Corrupt input, or a missing dependency (classically zlib for PNG/FLAC). |
+
+## The scenarios behind them
+
+### ENOMEM (-12) during normal use
+
+Almost always **leaked sessions**, not real memory pressure. Video decoders, audio decoders, and
+probes each have their own pool of 8 slots (encoders have 4); each open takes one until you
+`close()`. Pair every open with a `close()` (in a `finally`). See [sessions & memory](/docs/start/how-it-works/#sessions-and-memory)
+and the [troubleshooting guide](/docs/guides/troubleshooting/#enomem--12-after-a-few-operations).
+
+### INVALIDDATA on a PNG, FLAC, or MKV
+
+The stream opens but frame dimensions can't be resolved — the classic **zlib-missing**
+symptom. zlib is enabled in the shipped builds; this only bites custom builds that drop it.
+
+### DECODER_NOT_FOUND on a valid file
+
+The file is fine, but its codec isn't in your build. Confirm against the
+[codec list](/docs/formats/codecs/); if it's a non-probing container, you may also need to force the
+demuxer with `decode(input, { format })`.
+
+### ENOENT (-2) from exec/FFmpeg class
+
+`ff.exec(['-i','input.mp4'])` couldn't find `/input.mp4` in the virtual filesystem. Write it
+first with `ff.writeFile('input.mp4', data)`.
+
+## End of stream is not an error
+
+`nextFrame()` and `nextSamples()` return **`null`** at end of stream — they don't throw.
+Internally FFmpeg signals EOF, which the wrappers translate to `null`. Loop until you get it:
+
+```js
+let frame;
+while ((frame = dec.nextFrame()) !== null) { /* … */ }
+```
+
+{{< aside type="tip" >}}
+If you only ever see the numeric code and want the name, paste it into a search or run
+`node -e "console.log(<code>)"` against FFmpeg's `error.h` — but in practice, match the code
+to the **operation** that threw (open vs decode vs encode) and the tables above will point you
+to the cause.
+{{< /aside >}}

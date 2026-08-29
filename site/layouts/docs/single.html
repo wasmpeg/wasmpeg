@@ -1,0 +1,45 @@
+{{ define "main" }}
+<div class="docs-shell">
+  <aside class="docs-sidebar" data-sidebar aria-label="Documentation navigation">
+    {{ partial "docs-sidebar.html" . }}
+  </aside>
+
+  <main class="docs-main">
+    <div class="docs-toolbar">
+      <nav class="breadcrumbs" aria-label="Breadcrumbs">
+        <a href="/docs/start/introduction/">Docs</a>
+        {{ with .Parent }}
+          {{ if ne .Title "Documentation" }}
+            {{ partial "icon.html" "chevron-right" }}
+            <span>{{ .Title }}</span>
+          {{ end }}
+        {{ end }}
+      </nav>
+      <button class="docs-menu-toggle" data-nav-toggle aria-label="Toggle section navigation">
+        {{ partial "icon.html" "menu" }} Sections
+      </button>
+    </div>
+
+    <article class="prose">
+      <h1>{{ .Title }}</h1>
+      {{ with .Description }}<p class="lead">{{ . }}</p>{{ end }}
+      {{ .Content }}
+    </article>
+
+    {{ partial "prev-next.html" . }}
+
+    <div class="page-foot">
+      <a href="{{ .Site.Params.githubRepo }}/edit/main/site/content/{{ .File.Path }}" target="_blank" rel="noopener">
+        {{ partial "icon.html" "github" }} Edit this page on GitHub
+      </a>
+    </div>
+  </main>
+
+  <aside class="docs-toc" aria-label="Table of contents">
+    {{ if gt (len .TableOfContents) 60 }}
+    <p class="toc-title">On this page</p>
+    <div class="toc">{{ .TableOfContents }}</div>
+    {{ end }}
+  </aside>
+</div>
+{{ end }}

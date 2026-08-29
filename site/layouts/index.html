@@ -1,0 +1,45 @@
+{{ define "main" }}
+<div class="home-hero">
+  <h1>wasmpeg</h1>
+  <p class="lead">{{ .Site.Params.description }}</p>
+  
+  <div class="install-box">
+    <code>npm install wasmpeg</code>
+  </div>
+
+  <div class="code-window">
+    <div class="code-header">
+      <span>example.js</span>
+    </div>
+    {{ highlight `import wasmpeg from 'wasmpeg';
+
+await wasmpeg.load();
+
+// Decode directly to an RGBA Uint8ClampedArray
+const rgba = await wasmpeg.scale(file, 1280, 720);
+
+// Or parse container metadata without decoding
+const info = await wasmpeg.probe(file);
+console.log(info.duration, info.video.fpsNum / info.video.fpsDen);` "js" "" }}
+  </div>
+</div>
+
+<div class="features-grid">
+  <div class="feature">
+    <h3>{{ partial "icon.html" "zap" }} Built for speed</h3>
+    <p>Skips the Emscripten filesystem for core workflows. Demux and decode directly from memory, straight to a typed array.</p>
+  </div>
+  <div class="feature">
+    <h3>{{ partial "icon.html" "check" }} FATE verified</h3>
+    <p>Tested against FFmpeg's own regression suite. {{ .Site.Params.fateCoverage }}% FATE coverage, {{ .Site.Params.fateCorrectness }}% byte-for-byte exactness.</p>
+  </div>
+  <div class="feature">
+    <h3>{{ partial "icon.html" "package" }} One package</h3>
+    <p>Zero-config. Universal build runs identically on Node, browsers, and workers. No separate Core packages to juggle.</p>
+  </div>
+  <div class="feature">
+    <h3>{{ partial "icon.html" "code" }} WebGPU accelerated</h3>
+    <p>Includes an experimental hardware-accelerated pipeline. Falls back silently to WebAssembly CPU if the device lacks support.</p>
+  </div>
+</div>
+{{ end }}

@@ -1,0 +1,10 @@
+{{- $type := .Get "type" | default "note" -}}
+{{- $icons := dict "note" "info" "tip" "lightbulb" "caution" "alert-triangle" "danger" "alert-octagon" -}}
+{{- $labels := dict "note" "Note" "tip" "Tip" "caution" "Caution" "danger" "Danger" -}}
+<div class="aside aside-{{ $type }}"{{ with .Get "id" }} id="{{ . }}"{{ end }}>
+  <div class="aside-head">
+    {{ partial "icon.html" (index $icons $type) }}
+    <span>{{ with .Get "title" }}{{ . }}{{ else }}{{ index $labels $type }}{{ end }}</span>
+  </div>
+  <div class="aside-body">{{ .Inner | markdownify }}</div>
+</div>

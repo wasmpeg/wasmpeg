@@ -1,0 +1,61 @@
+{{- $release := "" -}}
+{{- $api := "https://api.github.com/repos/wasmpeg/wasmpeg/releases/latest" -}}
+{{- $res := resources.GetRemote $api -}}
+{{- with $res -}}
+  {{- if not .Err -}}
+    {{- with . | transform.Unmarshal -}}
+      {{- with .tag_name -}}{{ $release = . }}{{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+<header class="site-header">
+  <input type="checkbox" id="mobile-menu-toggle" class="mobile-menu-checkbox">
+  <div class="header-inner">
+    <a class="brand" href="/">
+      <span class="brand-mark">w</span>
+      <span class="brand-name">wasmpeg</span>
+      {{ with $release }}<span class="brand-tag">{{ . }}</span>{{ end }}
+    </a>
+
+    <nav class="header-nav">
+      {{ $cur := .RelPermalink }}
+      {{ range .Site.Menus.main }}
+      {{ $patterns := split (.Params.match | default .URL) "," }}
+      {{ $isActive := false }}
+      {{ range $patterns }}
+        {{ if and (ne . "") (hasPrefix $cur .) }}{{ $isActive = true }}{{ end }}
+      {{ end }}
+      <a href="{{ .URL }}" class="{{ if $isActive }}is-active{{ end }}">{{ .Name }}</a>
+      {{ end }}
+      <a class="mobile-only-link" href="{{ .Site.Params.githubRepo }}" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <div class="header-tools">
+      <button class="search-trigger" data-search-open aria-label="Search documentation">
+        {{ partial "icon.html" "search" }}
+        <span>Search docs…</span>
+        <kbd>⌘K</kbd>
+      </button>
+      <button class="icon-btn" data-theme-toggle aria-label="Toggle theme">
+        <span class="on-light">{{ partial "icon.html" "moon" }}</span>
+        <span class="on-dark">{{ partial "icon.html" "sun" }}</span>
+      </button>
+      <a class="icon-btn desktop-only" href="{{ .Site.Params.githubRepo }}" target="_blank" rel="noopener" aria-label="GitHub Repository">{{ partial "icon.html" "github" }}</a>
+      <label for="mobile-menu-toggle" class="icon-btn nav-toggle" aria-label="Toggle menu">
+        <span class="menu-icon-open">{{ partial "icon.html" "menu" }}</span>
+        <span class="menu-icon-close">{{ partial "icon.html" "x" }}</span>
+      </label>
+    </div>
+  </div>
+</header>
+
+<div class="search-modal" data-search-modal hidden>
+  <div class="search-panel">
+    <div class="search-input-row">
+      {{ partial "icon.html" "search" }}
+      <input type="search" placeholder="Search guides, codecs, API reference…" data-search-input autocomplete="off" spellcheck="false">
+      <button class="icon-btn" data-search-close aria-label="Close search">{{ partial "icon.html" "x" }}</button>
+    </div>
+    <div class="search-results" data-search-results></div>
+  </div>
+</div>

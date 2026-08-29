@@ -1,0 +1,25 @@
+{{ define "main" }}
+<div class="docs-shell">
+  <aside class="docs-sidebar" data-sidebar>{{ partial "docs-sidebar.html" . }}</aside>
+  <main class="docs-main">
+    <div class="docs-toolbar docs-toolbar-end">
+      <button class="docs-menu-toggle" data-nav-toggle aria-label="Toggle section navigation">
+        {{ partial "icon.html" "menu" }} Sections
+      </button>
+    </div>
+    <article class="prose">
+      <h1>{{ .Title }}</h1>
+      {{ .Content }}
+      <div class="card-grid">
+        {{ range .Pages.ByWeight }}
+        <a class="card link-card" href="{{ .RelPermalink }}">
+          <p class="card-title">{{ .Title }}{{ partial "icon.html" "arrow-right" }}</p>
+          {{ with .Description }}<p class="card-body">{{ . }}</p>{{ end }}
+        </a>
+        {{ end }}
+      </div>
+    </article>
+  </main>
+  <aside class="docs-toc"></aside>
+</div>
+{{ end }}

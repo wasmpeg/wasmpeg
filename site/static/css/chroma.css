@@ -1,0 +1,32 @@
+/* Basic/Utilitarian Chroma syntax highlighting */
+.chroma { color: var(--tx); }
+.chroma .err { color: var(--tx); }
+
+/* keywords */
+.chroma .k, .chroma .kc, .chroma .kd, .chroma .kn, .chroma .kp, .chroma .kr, .chroma .kt {
+  color: var(--accent); font-weight: bold;
+}
+
+/* strings */
+.chroma .s, .chroma .s1, .chroma .s2, .chroma .sb, .chroma .si { color: #cc3300; }
+
+/* comments */
+.chroma .c, .chroma .c1, .chroma .cm { color: var(--tx-muted); font-style: italic; }
+
+/* names */
+.chroma .n, .chroma .na, .chroma .nb, .chroma .nt, .chroma .nv, .chroma .nx { color: var(--tx); }
+.chroma .nf { color: var(--accent); }
+
+/* numbers */
+.chroma .m, .chroma .mi, .chroma .mf { color: #008800; }
+
+.chroma .o, .chroma .p { color: var(--tx); }
+
+[data-theme="dark"] .chroma .s,
+[data-theme="dark"] .chroma .s1,
+[data-theme="dark"] .chroma .s2,
+[data-theme="dark"] .chroma .sb,
+[data-theme="dark"] .chroma .si { color: #ff9966; }
+[data-theme="dark"] .chroma .m,
+[data-theme="dark"] .chroma .mi,
+[data-theme="dark"] .chroma .mf { color: #66cc66; }

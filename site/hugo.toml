@@ -1,0 +1,73 @@
+baseURL = "https://wasmpeg.dev/"
+languageCode = "en-us"
+title = "wasmpeg"
+
+enableRobotsTXT = true
+enableEmoji = false
+
+[markup.goldmark.renderer]
+  unsafe = true
+
+[markup.highlight]
+  noClasses = false
+  lineNos = false
+  codeFences = true
+
+[markup.tableOfContents]
+  startLevel = 2
+  endLevel = 3
+
+[outputs]
+  home = ["HTML", "RSS", "JSON"]
+
+[params]
+  description = "FFmpeg for the browser, built for the decode → display loop."
+  githubOrg = "https://github.com/wasmpeg"
+  githubRepo = "https://github.com/wasmpeg/wasmpeg"
+  githubTracking = "https://github.com/wasmpeg/wasmpeg-tracking"
+  npmPackage = "wasmpeg"
+  npmPackageFull = "wasmpeg-full"
+  nodeMinVersion = "18"
+  license = "LGPL-2.1-or-later"
+  licenseFull = "GPL-2.0-or-later"
+  sizeRawMB = "7.1"
+  sizeGzMB = "3.2"
+  fateCoverage = "86.9"
+  fateCorrectness = "93.3"
+  ffmpegCoreSizeMB = "61.7"
+  contactEmail = "viju@wasmpeg.com"
+
+[[menu.main]]
+  name = "Docs"
+  url = "/docs/start/introduction/"
+  weight = 10
+  [menu.main.params]
+    match = "/docs/start/,/docs/build/,/docs/webgpu"
+
+[[menu.main]]
+  name = "Guides"
+  url = "/docs/guides/decode-video/"
+  weight = 20
+  [menu.main.params]
+    match = "/docs/guides/"
+
+[[menu.main]]
+  name = "API"
+  url = "/docs/reference/high-level/"
+  weight = 30
+  [menu.main.params]
+    match = "/docs/reference/"
+
+[[menu.main]]
+  name = "Formats & FATE"
+  url = "/docs/formats/codecs/"
+  weight = 40
+  [menu.main.params]
+    match = "/docs/formats/"
+
+[[menu.main]]
+  name = "Blog"
+  url = "/blog/"
+  weight = 50
+  [menu.main.params]
+    match = "/blog/"
