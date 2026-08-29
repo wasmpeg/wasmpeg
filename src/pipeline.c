@@ -232,6 +232,172 @@ done:
     av_buffer_unref(&device_ref);
     return ret;
 }
+
+/* ---------------------------------------------------- persistent GPU ----- */
+
+/*
+ * A GPU session holds the expensive, reusable half of the filter pipeline: the
+ * WebGPU device, the hardware frame pool, and the built filtergraph. Creating a
+ * device means an async adapter request followed by an async device request, so
+ * doing it per frame — as pipeline_run_rgba_gpu does — dominates the cost of the
+ * work itself. Open a session once, run it per frame, close it at the end.
+ */
+
+#define MAX_GPU_SESSIONS 4
+
+typedef struct {
+    int               active;
+    AVBufferRef      *device_ref;
+    AVBufferRef      *frames_ref;
+    AVFilterGraph    *graph;
+    AVFilterContext  *src_ctx;
+    AVFilterContext  *sink_ctx;
+    AVFrame          *sw_in;
+    AVFrame          *hw_in;
+    int               src_w, src_h;
+    int               dst_w, dst_h;
+} GpuSession;
+
+static GpuSession g_gpu[MAX_GPU_SESSIONS];
+
+static void gpu_session_cleanup(GpuSession *s)
+{
+    av_frame_free(&s->sw_in);
+    av_frame_free(&s->hw_in);
+    avfilter_graph_free(&s->graph);
+    av_buffer_unref(&s->frames_ref);
+    av_buffer_unref(&s->device_ref);
+    memset(s, 0, sizeof(*s));
+}
+
+/*
+ * Open a reusable GPU filter session.
+ *
+ * Returns a handle (0..MAX_GPU_SESSIONS-1) or a negative AVERROR.
+ */
+EMSCRIPTEN_KEEPALIVE
+int gpu_session_open(int src_w, int src_h, int dst_w, int dst_h,
+                     const char *filtergraph)
+{
+    if (src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0 || !filtergraph)
+        return AVERROR(EINVAL);
+
+    int h = -1;
+    for (int i = 0; i < MAX_GPU_SESSIONS; i++)
+        if (!g_gpu[i].active) { h = i; break; }
+    if (h < 0) return AVERROR(ENOMEM);
+
+    GpuSession *s = &g_gpu[h];
+    memset(s, 0, sizeof(*s));
+    s->src_w = src_w; s->src_h = src_h;
+    s->dst_w = dst_w; s->dst_h = dst_h;
+
+    int ret = av_hwdevice_ctx_create(&s->device_ref, AV_HWDEVICE_TYPE_WEBGPU,
+                                     NULL, NULL, 0);
+    if (ret < 0) goto fail;
+
+    s->frames_ref = av_hwframe_ctx_alloc(s->device_ref);
+    if (!s->frames_ref) { ret = AVERROR(ENOMEM); goto fail; }
+
+    AVHWFramesContext *fc = (AVHWFramesContext *)s->frames_ref->data;
+    fc->format            = AV_PIX_FMT_WEBGPU;
+    fc->sw_format         = AV_PIX_FMT_RGBA;
+    fc->width             = src_w;
+    fc->height            = src_h;
+    fc->initial_pool_size = 4;
+    ret = av_hwframe_ctx_init(s->frames_ref);
+    if (ret < 0) goto fail;
+
+    s->graph = build_graph(filtergraph, src_w, src_h, AV_PIX_FMT_WEBGPU,
+                           s->frames_ref, &s->src_ctx, &s->sink_ctx);
+    if (!s->graph) { ret = AVERROR_EXTERNAL; goto fail; }
+
+    /* The staging frames are reused too: allocating them per run would put a
+     * malloc and a hwframe pool hit back into the hot path. */
+    s->sw_in = av_frame_alloc();
+    if (!s->sw_in) { ret = AVERROR(ENOMEM); goto fail; }
+    s->sw_in->format = AV_PIX_FMT_RGBA;
+    s->sw_in->width  = src_w;
+    s->sw_in->height = src_h;
+    ret = av_frame_get_buffer(s->sw_in, 0);
+    if (ret < 0) goto fail;
+
+    s->hw_in = av_frame_alloc();
+    if (!s->hw_in) { ret = AVERROR(ENOMEM); goto fail; }
+    ret = av_hwframe_get_buffer(s->frames_ref, s->hw_in, 0);
+    if (ret < 0) goto fail;
+
+    s->active = 1;
+    return h;
+
+fail:
+    gpu_session_cleanup(s);
+    return ret;
+}
+
+/*
+ * Run one frame through an open session.
+ *
+ * `src` is src_w*src_h*4 RGBA bytes, `dst` is dst_w*dst_h*4. Returns 0 or a
+ * negative AVERROR.
+ */
+EMSCRIPTEN_KEEPALIVE
+int gpu_session_run(int handle, const uint8_t *src_rgba, uint8_t *dst_rgba)
+{
+    if (handle < 0 || handle >= MAX_GPU_SESSIONS || !g_gpu[handle].active)
+        return AVERROR(EINVAL);
+    if (!src_rgba || !dst_rgba) return AVERROR(EINVAL);
+
+    GpuSession *s = &g_gpu[handle];
+    AVFrame *hw_out = NULL, *sw_out = NULL;
+    int ret;
+
+    ret = av_frame_make_writable(s->sw_in);
+    if (ret < 0) return ret;
+    av_image_copy_plane(s->sw_in->data[0], s->sw_in->linesize[0],
+                        src_rgba, s->src_w * 4, s->src_w * 4, s->src_h);
+
+    ret = av_hwframe_transfer_data(s->hw_in, s->sw_in, 0);
+    if (ret < 0) return ret;
+
+    ret = av_buffersrc_add_frame_flags(s->src_ctx, s->hw_in,
+                                       AV_BUFFERSRC_FLAG_KEEP_REF);
+    if (ret < 0) return ret;
+
+    hw_out = av_frame_alloc();
+    if (!hw_out) return AVERROR(ENOMEM);
+    ret = av_buffersink_get_frame(s->sink_ctx, hw_out);
+    if (ret < 0) goto done;
+
+    sw_out = av_frame_alloc();
+    if (!sw_out) { ret = AVERROR(ENOMEM); goto done; }
+    sw_out->format = AV_PIX_FMT_RGBA;
+    sw_out->width  = s->dst_w;
+    sw_out->height = s->dst_h;
+    ret = av_frame_get_buffer(sw_out, 0);
+    if (ret < 0) goto done;
+
+    ret = av_hwframe_transfer_data(sw_out, hw_out, 0);
+    if (ret < 0) goto done;
+
+    av_image_copy_plane(dst_rgba, s->dst_w * 4,
+                        sw_out->data[0], sw_out->linesize[0],
+                        s->dst_w * 4, s->dst_h);
+    ret = 0;
+
+done:
+    av_frame_free(&hw_out);
+    av_frame_free(&sw_out);
+    return ret;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void gpu_session_close(int handle)
+{
+    if (handle >= 0 && handle < MAX_GPU_SESSIONS && g_gpu[handle].active)
+        gpu_session_cleanup(&g_gpu[handle]);
+}
+
 #endif /* CONFIG_WEBGPU */
 
 /* -------------------------------------------------- shared memory I/O ---- */
@@ -1094,6 +1260,43 @@ void encoder_close(int handle)
 }
 
 /* ------------------------------------------------------------ benchmarks */
+
+EMSCRIPTEN_KEEPALIVE
+/*
+ * Same workload as bench_scale_webgpu, but through one reusable session.
+ *
+ * The pair is the point: bench_scale_webgpu pays for device creation on every
+ * frame, this one pays once. The difference is the cost of the per-call device.
+ */
+EMSCRIPTEN_KEEPALIVE
+double bench_scale_webgpu_session(int src_w, int src_h, int dst_w, int dst_h, int n)
+{
+#ifdef CONFIG_WEBGPU
+    char fg[64];
+    snprintf(fg, sizeof(fg), "scale_webgpu=%d:%d", dst_w, dst_h);
+
+    uint8_t *src = (uint8_t *)av_malloc(src_w * src_h * 4);
+    uint8_t *dst = (uint8_t *)av_malloc(dst_w * dst_h * 4);
+    if (!src || !dst) { av_free(src); av_free(dst); return -1.0; }
+    memset(src, 128, src_w * src_h * 4);
+
+    int h = gpu_session_open(src_w, src_h, dst_w, dst_h, fg);
+    if (h < 0) { av_free(src); av_free(dst); return -1.0; }
+
+    /* Time only the per-frame work; session setup is the thing being amortised. */
+    double t0 = emscripten_get_now();
+    for (int i = 0; i < n; i++)
+        gpu_session_run(h, src, dst);
+    double elapsed = (emscripten_get_now() - t0) / n;
+
+    gpu_session_close(h);
+    av_free(src); av_free(dst);
+    return elapsed;
+#else
+    (void)src_w; (void)src_h; (void)dst_w; (void)dst_h; (void)n;
+    return -1.0;
+#endif
+}
 
 EMSCRIPTEN_KEEPALIVE
 double bench_scale_webgpu(int src_w, int src_h, int dst_w, int dst_h, int n)
