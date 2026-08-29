@@ -94,6 +94,62 @@ function allocBytes(buf) {
     return ptr;
 }
 
+/* ── persistent GPU session ──────────────────────────────────────────────── */
+
+/**
+ * Open a reusable GPU filter session.
+ *
+ * The WebGPU device, hardware frame pool and filtergraph are built once and
+ * reused for every run(). Creating a device costs two async round trips, so
+ * per-call creation dominates the actual filtering work — open a session when
+ * you are filtering more than one frame at the same size.
+ *
+ * Returns { run(rgba) -> Uint8ClampedArray, close() }.
+ */
+function createGpuSession({ srcW, srcH, dstW, dstH, filtergraph } = {}) {
+    assertLoaded();
+    if (!_hasGPU) throw new Error('createGpuSession requires the WebGPU build');
+    if (!srcW || !srcH || !dstW || !dstH) throw new Error('createGpuSession: sizes are required');
+
+    const fg = filtergraph ?? `scale_webgpu=${dstW}:${dstH}`;
+    const handle = _mod.ccall('gpu_session_open', 'number',
+        ['number','number','number','number','string'], [srcW, srcH, dstW, dstH, fg]);
+    if (handle < 0) throw new Error(`gpu_session_open failed: ${handle}`);
+
+    const srcBytes = srcW * srcH * 4;
+    const dstBytes = dstW * dstH * 4;
+    const srcPtr = _mod._malloc(srcBytes);
+    const dstPtr = _mod._malloc(dstBytes);
+
+    let closed = false;
+    return {
+        srcW, srcH, dstW, dstH, filtergraph: fg,
+        run(rgba) {
+            if (closed) throw new Error('gpu session is closed');
+            _mod.HEAPU8.set(rgba, srcPtr);
+            const ret = _mod.ccall('gpu_session_run', 'number',
+                ['number','number','number'], [handle, srcPtr, dstPtr]);
+            if (ret !== 0) throw new Error(`gpu_session_run failed: ${ret}`);
+            return new Uint8ClampedArray(_mod.HEAPU8.buffer, dstPtr, dstBytes).slice();
+        },
+        close() {
+            if (closed) return;
+            closed = true;
+            _mod._free(srcPtr);
+            _mod._free(dstPtr);
+            _mod.ccall('gpu_session_close', null, ['number'], [handle]);
+        },
+    };
+}
+
+// scale() is stateless, but callers almost always run the same geometry in a
+// loop. Hold one session and reuse it while the parameters match.
+let _cached = null;
+
+function _releaseCached() {
+    if (_cached) { try { _cached.close(); } catch { /* already gone */ } _cached = null; }
+}
+
 /* ── video scale ─────────────────────────────────────────────────────────── */
 
 function scale(srcRgba, srcW, srcH, dstW, dstH, filtergraph) {
@@ -101,6 +157,19 @@ function scale(srcRgba, srcW, srcH, dstW, dstH, filtergraph) {
     const fg = filtergraph ?? (_hasGPU
         ? `scale_webgpu=${dstW}:${dstH}`
         : `scale=${dstW}:${dstH}`);
+
+    if (_hasGPU) {
+        if (!_cached || _cached.srcW !== srcW || _cached.srcH !== srcH ||
+            _cached.dstW !== dstW || _cached.dstH !== dstH || _cached.filtergraph !== fg) {
+            _releaseCached();
+            try {
+                _cached = createGpuSession({ srcW, srcH, dstW, dstH, filtergraph: fg });
+            } catch {
+                _cached = null;   // fall through to the per-call path below
+            }
+        }
+        if (_cached) return _cached.run(srcRgba);
+    }
 
     const fn     = _hasGPU ? 'pipeline_run_rgba_gpu' : 'pipeline_run_rgba';
     const srcPtr = allocBytes(srcRgba);
@@ -334,6 +403,12 @@ function benchGpu(srcW, srcH, dstW, dstH, iters) {
         ['number','number','number','number','number'], [srcW, srcH, dstW, dstH, iters]);
 }
 
+function benchGpuSession(srcW, srcH, dstW, dstH, iters) {
+    assertLoaded();
+    return _mod.ccall('bench_scale_webgpu_session', 'number',
+        ['number','number','number','number','number'], [srcW, srcH, dstW, dstH, iters]);
+}
+
 function benchCpu(srcW, srcH, dstW, dstH, iters) {
     assertLoaded();
     return _mod.ccall('bench_scale_cpu', 'number',
@@ -342,6 +417,8 @@ function benchCpu(srcW, srcH, dstW, dstH, iters) {
 
 export const gpu = {
     load, scale, onLog, offLog,
+    createGpuSession, releaseCachedSession: _releaseCached,
+    benchGpuSession,
     createDecoder, createDecoderFile,
     createAudioDecoder, probe, createEncoder,
     hasWebGPU, benchGpu, benchCpu,
