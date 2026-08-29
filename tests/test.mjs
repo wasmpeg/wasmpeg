@@ -583,6 +583,39 @@ async function testEncodeBudget() {
     }
 }
 
+// ── 11. Single wasm instance ─────────────────────────────────────────────────
+
+async function testSingleInstance() {
+    section('Single wasm instance');
+
+    const { gpu, FFmpeg } = await import('../src/js/index.js');
+    await gpu.load();
+
+    const ff = new FFmpeg();
+    await ff.load();
+
+    // A second module instance would double resident wasm and hand writeFile()
+    // a filesystem exec() cannot see.
+    await ff.writeFile('/shared-instance.bin', new Uint8Array([1, 2, 3]));
+    let visible = true;
+    try { gpu.FS.readFile('/shared-instance.bin'); } catch { visible = false; }
+    ok('FFmpeg writeFile lands in the shared module FS', visible);
+
+    // End to end: write a real PNG, then exec() against that path.
+    await ff.writeFile('/shared-in.png', new Uint8Array(makeTinyPng(8, 8)));
+    const out = await ff.exec(['-i', '/shared-in.png', '-vf', 'scale=4:4']);
+    ok('exec() decodes a file written through the class', out.length === 4 * 4 * 4);
+
+    const logs = [];
+    ff.on('log', e => logs.push(e));
+    ff.terminate();
+    ok('terminate() marks the instance unloaded', ff.loaded === false);
+
+    await ff.load();
+    ok('load() after terminate() works', ff.loaded === true);
+    ff.terminate();
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -599,6 +632,7 @@ await testHighLevel();
 await testExportSurface();
 await testSessionLifecycle();
 await testEncodeBudget();
+await testSingleInstance();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
