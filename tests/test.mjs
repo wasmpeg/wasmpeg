@@ -871,6 +871,78 @@ async function testSessionPoolBounds() {
     again.close();
 }
 
+// ── 19. Format hint routing parity ───────────────────────────────────────────
+
+async function testHintRoutingParity() {
+    section('Format hint routing');
+
+    const { gpu }  = await import('../src/js/gpu.js');
+    const { exec } = await import('../src/js/exec.mjs');
+    const wasmpegApi = (await import('../src/js/wasmpeg.mjs')).default;
+    await wasmpegApi.load();
+
+    // A name whose extension only resolves through formats.js, carried on a
+    // File so normalizeInput can see it. Both audio entry points must derive
+    // the same demuxer hint; exec() used to drop it.
+    const wav  = makeWav(8000, 1, 200);
+    const file = new File([wav], 'clip.vag');
+
+    const realCreate = gpu.createAudioDecoder;
+    const hints = [];
+    gpu.createAudioDecoder = (bytes, fmt) => {
+        hints.push(fmt);
+        // Route with the real format so the call still succeeds.
+        return realCreate.call(gpu, bytes, 'wav');
+    };
+    try {
+        (await wasmpegApi.decodeAudio(file)).close();
+        (await exec(file, ['-vn'])).close();
+        ok('both audio paths derive a hint', hints.length === 2);
+        ok('exec matches decodeAudio', hints[0] === hints[1]);
+        ok('the hint is the mapped demuxer', hints[0] === 'kvag');
+    } finally {
+        gpu.createAudioDecoder = realCreate;
+    }
+}
+
+// ── 20. Preset composition ───────────────────────────────────────────────────
+
+async function testPresets() {
+    section('Preset composition');
+
+    const src = fs.readFileSync(path.join(ROOT, 'src/cli/configure.mjs'), 'utf8');
+    const body = src.slice(src.indexOf('const PRESETS'), src.indexOf('// ── arg parsing'));
+
+    // Pull one preset's decoder list out of the source without executing it.
+    const listOf = (preset, key) => {
+        const at = body.indexOf(`    ${preset}: {`);
+        if (at < 0) return null;
+        const seg = body.slice(at, body.indexOf('\n    },', at));
+        const m   = seg.match(new RegExp(`${key}:\\s*\\[([\\s\\S]*?)\\]`));
+        return m ? m[1].match(/'[^']+'/g)?.map(x => x.slice(1, -1)) ?? [] : null;
+    };
+
+    const free = listOf('free', 'decoders');
+    ok('free preset exists', Array.isArray(free) && free.length > 0);
+
+    // The whole point of this preset is the licensing posture. If one of these
+    // reappears the build silently stops being royalty-free.
+    const encumbered = ['h264', 'hevc', 'aac', 'mpeg1video', 'mpeg2video',
+                        'mpeg4', 'h263', 'vc1', 'wmv1', 'wmv2', 'wmv3',
+                        'dca', 'ac3', 'eac3', 'mp3'];
+    const leaked = encumbered.filter(c => free.includes(c));
+    ok(`free preset carries no encumbered decoders${leaked.length ? ' (' + leaked.join(',') + ')' : ''}`,
+        leaked.length === 0);
+
+    for (const want of ['vp8', 'vp9', 'av1', 'theora', 'opus', 'vorbis', 'flac'])
+        ok(`free preset keeps ${want}`, free.includes(want));
+
+    // lgpl is the shipping build and must still carry the mainstream codecs.
+    const lgpl = listOf('lgpl', 'decoders');
+    for (const want of ['h264', 'hevc', 'vp9', 'aac'])
+        ok(`lgpl preset keeps ${want}`, lgpl.includes(want));
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -895,6 +967,8 @@ await testFormatHints();
 testArgStructure();
 await testAudioProbeEncoder();
 await testSessionPoolBounds();
+await testHintRoutingParity();
+await testPresets();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
