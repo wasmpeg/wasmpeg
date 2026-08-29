@@ -266,6 +266,17 @@ function fgDimensions(fg, srcW = 0, srcH = 0) {
     return { w: Math.round(w), h: Math.round(h) };
 }
 
+// Parse an ffmpeg time value into milliseconds: "90", "90.5", "01:30",
+// "00:01:30.25". Returns null when it does not look like a time.
+function parseTime(v) {
+    const str = String(v).trim();
+    if (!/^\d+(:\d{1,2}){0,2}(\.\d+)?$/.test(str)) return null;
+    const parts = str.split(':').map(Number);
+    if (parts.some(Number.isNaN)) return null;
+    const secs = parts.reduce((acc, n) => acc * 60 + n, 0);
+    return Math.round(secs * 1000);
+}
+
 // Wrap a decoder so it reports end of stream after n frames (-vframes/-frames).
 function limitFrames(dec, n) {
     let seen = 0;
@@ -274,6 +285,7 @@ function limitFrames(dec, n) {
         height: dec.height,
         fps:    dec.fps,
         nextFrame(...args) { return seen++ < n ? dec.nextFrame(...args) : null; },
+        seek(ms) { seen = 0; dec.seek(ms); },
         close() { dec.close(); },
     };
 }
@@ -367,9 +379,26 @@ export async function exec(input, args) {
 
     // ── decode-only — return decoder ─────────────────────────────────────────
     if (dec) {
-        // -vframes N / -frames:v N cap the stream length.
+        // -ss seeks before the first frame is pulled.
+        const ssRaw = outOpts['-ss'] ?? parsed.inputs[0]?.options['-ss'];
+        if (ssRaw !== undefined) {
+            const ms = parseTime(ssRaw);
+            if (ms === null) throw new Error(`cannot parse -ss value: ${ssRaw}`);
+            dec.seek(ms);
+        }
+
+        // -vframes N / -frames:v N cap the stream length outright.
         const key   = Object.keys(outOpts).find(k => k === '-vframes' || k.startsWith('-frames'));
-        const limit = key ? parseInt(outOpts[key], 10) : NaN;
+        let   limit = key ? parseInt(outOpts[key], 10) : NaN;
+
+        // -t / -to express the cap as a duration, which we convert with the
+        // stream's frame rate. Approximate: it assumes a constant rate.
+        if (!Number.isInteger(limit) || limit <= 0) {
+            const tRaw = outOpts['-t'] ?? outOpts['-to'];
+            const tMs  = tRaw !== undefined ? parseTime(tRaw) : null;
+            if (tMs !== null && dec.fps > 0) limit = Math.max(1, Math.round((tMs / 1000) * dec.fps));
+        }
+
         return Number.isInteger(limit) && limit > 0 ? limitFrames(dec, limit) : dec;
     }
 
