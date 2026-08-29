@@ -1,6 +1,6 @@
 # FATE Compatibility
 
-Last run: **2026-06-10** · commit `edcde15f14` · WASM **7236 KB**
+Last run: **2026-08-29** · commit `a52b07f0d9` · WASM **7247 KB**
 
 ## Overall: 1079/1242 (86.9%)
 
@@ -23,7 +23,7 @@ Last run: **2026-06-10** · commit `edcde15f14` · WASM **7236 KB**
 | dolby_e | audio | 2 | 2 | 100.0% |
 | dpx | video | 2 | 2 | 100.0% |
 | dsf | audio | 0 | 1 | 0.0% |
-| dts | video | 6 | 7 | 85.7% |
+| dts | audio | 6 | 7 | 85.7% |
 | exr | video | 74 | 74 | 100.0% |
 | flac | video | 2 | 2 | 100.0% |
 | g722 | video | 1 | 1 | 100.0% |
