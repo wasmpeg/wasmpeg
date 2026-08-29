@@ -151,6 +151,19 @@ function _wrapVideoDecoder(handle) {
             return new Uint8ClampedArray(_mod.HEAPU8.buffer, frameBuf, needed).slice();
         },
 
+        /**
+         * Seek to `ms` from the start of the video stream.
+         *
+         * Lands on the nearest keyframe at or before the target, so the next
+         * frame may be earlier than requested. Container seek, not frame exact.
+         * A negative target clamps to the start.
+         */
+        seek(ms) {
+            const ret = _mod.ccall('decoder_seek', 'number',
+                ['number','number'], [handle, Math.max(0, Math.round(ms))]);
+            if (ret < 0) throw new Error(`decoder_seek failed: ${ret}`);
+        },
+
         close() {
             _mod._free(frameBuf);
             _mod.ccall('decoder_close', null, ['number'], [handle]);

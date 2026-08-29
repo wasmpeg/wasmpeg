@@ -540,6 +540,35 @@ int decoder_next_raw_frame(int handle, uint8_t *dst, int dst_cap)
     return size;
 }
 
+/*
+ * Seek to a timestamp, in milliseconds from the start of the video stream.
+ *
+ * Seeks backwards to the nearest keyframe at or before the target, then flushes
+ * the codec so the next decoder_next_frame() starts from a clean state. The
+ * frame it returns is the keyframe, which may sit earlier than the requested
+ * time: this is a container seek, not frame-accurate seeking.
+ *
+ * Returns 0 on success, negative AVERROR on failure.
+ */
+EMSCRIPTEN_KEEPALIVE
+int decoder_seek(int handle, int ms)
+{
+    if (handle < 0 || handle >= MAX_SESSIONS || !g_dec[handle].active)
+        return AVERROR(EINVAL);
+    if (ms < 0)
+        return AVERROR(EINVAL);
+
+    DecodeSession *s = &g_dec[handle];
+    AVRational tb = s->fmt_ctx->streams[s->video_stream]->time_base;
+    int64_t ts = av_rescale_q(ms, (AVRational){ 1, 1000 }, tb);
+
+    int ret = av_seek_frame(s->fmt_ctx, s->video_stream, ts, AVSEEK_FLAG_BACKWARD);
+    if (ret < 0) return ret;
+
+    avcodec_flush_buffers(s->codec_ctx);
+    return 0;
+}
+
 EMSCRIPTEN_KEEPALIVE
 void decoder_close(int handle)
 {
