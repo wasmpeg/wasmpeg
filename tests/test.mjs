@@ -85,6 +85,19 @@ function makeTinyPng(w = 2, h = 2) {
     return Buffer.concat([sig, pngChunk('IHDR', ihdr), pngChunk('IDAT', idat), pngChunk('IEND', Buffer.alloc(0))]);
 }
 
+// A PNG whose header parses but whose IDAT will not inflate: the decoder opens
+// (dimensions come from IHDR) and then fails on the first frame. That is the
+// window in which a session slot used to leak.
+function makeCorruptPng(w = 8, h = 8) {
+    const sig  = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
+    ihdr[8] = 8; ihdr[9] = 2;
+    return Buffer.concat([sig, pngChunk('IHDR', ihdr),
+        pngChunk('IDAT', Buffer.from([1, 2, 3, 4, 5, 6, 7, 8])),
+        pngChunk('IEND', Buffer.alloc(0))]);
+}
+
 async function loadWasm(jsPath) {
     const { default: factory } = await import(jsPath);
     const wasmBin = fs.readFileSync(jsPath.replace(/\.js$/, '.wasm'));
@@ -509,6 +522,39 @@ async function testExportSurface() {
     ff.terminate();
 }
 
+// ── 9. Session-slot lifecycle ────────────────────────────────────────────────
+
+async function testSessionLifecycle() {
+    section('Session lifecycle');
+
+    const { exec } = await import('../src/js/exec.mjs');
+    const bad = makeCorruptPng();
+
+    // Twelve failures against an eight-slot pool. If a failed filter op strands
+    // its decoder, the ninth open reports ENOMEM (-12) instead of the real
+    // decode error.
+    let openFailures = 0, failures = 0;
+    for (let i = 0; i < 12; i++) {
+        try {
+            await exec(new Uint8Array(bad), ['-vf', 'scale=4:4']);
+        } catch (e) {
+            failures++;
+            // A leak shows up as the *open* failing, not the decode.
+            if (/decoder_open/.test(e.message)) openFailures++;
+        }
+    }
+    ok('every failed filter op threw',            failures === 12);
+    ok('no failed op stranded a session slot',    openFailures === 0);
+
+    // The pool must still be usable afterwards.
+    const good = makeTinyPng(4, 4);
+    let out = null, poolErr = null;
+    try { out = await exec(new Uint8Array(good), ['-vf', 'scale=2:2']); }
+    catch (e) { poolErr = e; }
+    ok('pool still serves a good input after failures',
+        poolErr === null && out?.length === 2 * 2 * 4);
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -523,6 +569,7 @@ await testGpu(cpuJs);
 testArgParser();
 await testHighLevel();
 await testExportSurface();
+await testSessionLifecycle();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
