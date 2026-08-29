@@ -971,6 +971,41 @@ async function testPresets() {
         ok(`lgpl preset keeps ${want}`, lgpl.includes(want));
 }
 
+// ── 21. C export coverage ────────────────────────────────────────────────────
+
+function testExportCoverage() {
+    section('C export coverage');
+
+    const build = fs.readFileSync(path.join(ROOT, 'scripts/build.sh'), 'utf8');
+
+    // Every _name listed in any *_EXPORTS assignment in build.sh.
+    const exported = new Set();
+    for (const line of build.split('\n')) {
+        if (!/^[A-Z_]+_EXPORTS=/.test(line)) continue;
+        for (const m of line.matchAll(/_[a-z0-9_]+/g)) exported.add(m[0]);
+    }
+    ok('build.sh declares exports', exported.size > 20);
+
+    // Every symbol the JS actually ccalls.
+    const called = new Set();
+    for (const f of ['src/js/gpu.js', 'src/js/ffmpeg.js', 'src/js/exec.mjs', 'src/js/wasmpeg.mjs']) {
+        const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
+        for (const m of src.matchAll(/ccall\(\s*'([a-z0-9_]+)'/g)) called.add('_' + m[1]);
+    }
+    ok('js ccalls at least one symbol', called.size > 10);
+
+    // A ccall to a symbol that was never exported fails at runtime, not build
+    // time, so this is the cheapest place to catch it.
+    const missing = [...called].filter(c => !exported.has(c));
+    ok(`every ccalled symbol is exported${missing.length ? ' (missing: ' + missing.join(', ') + ')' : ''}`,
+        missing.length === 0);
+
+    // The GPU-only entry points must not be promised by the CPU build.
+    const cpuLine = build.split('\n').find(l => l.startsWith('CPU_EXPORTS=')) ?? '';
+    ok('cpu exports do not claim the gpu pipeline',
+        !cpuLine.includes('_pipeline_run_rgba_gpu'));
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -998,6 +1033,7 @@ await testSessionPoolBounds();
 await testHintRoutingParity();
 await testFsPathInputs();
 await testPresets();
+testExportCoverage();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
