@@ -280,12 +280,17 @@ export async function exec(input, args) {
             srcW    = norm.width;
             srcH    = norm.height;
         } else {
-            srcW    = dec.width;
-            srcH    = dec.height;
-            srcRgba = dec.nextFrame();
-            if (!srcRgba) throw new Error('input stream is empty — no frames decoded');
-            dec.close();
-            dec = null;
+            // Close in a finally: a decode error here would otherwise strand one
+            // of the eight session slots, and a few failures exhaust the pool.
+            try {
+                srcW    = dec.width;
+                srcH    = dec.height;
+                srcRgba = dec.nextFrame();
+                if (!srcRgba) throw new Error('input stream is empty — no frames decoded');
+            } finally {
+                dec.close();
+                dec = null;
+            }
         }
 
         // Determine output dimensions
