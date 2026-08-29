@@ -209,5 +209,47 @@
       "vp8": 100,
       "webp": 100
     }
+  },
+  {
+    "date": "2026-08-29",
+    "sha": "dd3cfeb8a3",
+    "pct": 93.3,
+    "pass": 387,
+    "total": 415,
+    "codecs": {
+      "bink": 100,
+      "bmp": 100,
+      "canopus": 100,
+      "cinepak": 100,
+      "cllc": 100,
+      "dpx": 100,
+      "fraps": 100,
+      "h264": 98.9,
+      "hap": 100,
+      "hevc": 50,
+      "indeo": 100,
+      "jpeg2000": 84.6,
+      "jpegls": 66.7,
+      "lagarith": 100,
+      "loco": 100,
+      "magicyuv": 100,
+      "mjpeg": 100,
+      "mpeg2": 50,
+      "mpeg4": 100,
+      "mss2": 100,
+      "other": 88.2,
+      "png": 100,
+      "psd": 100,
+      "qtrle": 100,
+      "svq3": 0,
+      "tga": 0,
+      "theora": 100,
+      "tiff": 100,
+      "utvideo": 100,
+      "vc1": 33.3,
+      "vp3": 100,
+      "vp6": 83.3,
+      "webp": 100
+    }
   }
 ]

@@ -1,13 +1,13 @@
 # FATE Decode Correctness
 
-Last run: **2026-08-29** · commit `f8bc5f4a2a`
+Last run: **2026-08-29** · commit `dd3cfeb8a3`
 
 Exact per-frame Adler-32 match against FFmpeg's vendored FATE reference output,
 over pure-decode video `framecrc` tests. A test passes only when every frame is
 byte-identical to the reference. This is stricter than [COMPAT.md](COMPAT.md),
 which only checks that decoding runs without erroring.
 
-## Overall: 392/426 (92%)
+## Overall: 387/415 (93.3%)
 
 | Codec | Correct | Total | Rate |
 |-------|--------:|------:|-----:|
@@ -16,26 +16,26 @@ which only checks that decoding runs without erroring.
 | canopus | 3 | 3 | 100.0% |
 | cinepak | 1 | 1 | 100.0% |
 | cllc | 3 | 3 | 100.0% |
-| dpx | 1 | 2 | 50.0% |
+| dpx | 1 | 1 | 100.0% |
 | fraps | 6 | 6 | 100.0% |
 | h264 | 175 | 177 | 98.9% |
 | hap | 7 | 7 | 100.0% |
-| hevc | 1 | 5 | 20.0% |
+| hevc | 1 | 2 | 50.0% |
 | indeo | 6 | 6 | 100.0% |
 | jpeg2000 | 11 | 13 | 84.6% |
 | jpegls | 4 | 6 | 66.7% |
-| lagarith | 7 | 8 | 87.5% |
+| lagarith | 5 | 5 | 100.0% |
 | loco | 2 | 2 | 100.0% |
 | magicyuv | 7 | 7 | 100.0% |
 | mjpeg | 2 | 2 | 100.0% |
 | mpeg2 | 1 | 2 | 50.0% |
-| mpeg4 | 2 | 3 | 66.7% |
+| mpeg4 | 2 | 2 | 100.0% |
 | mss2 | 3 | 3 | 100.0% |
 | other | 82 | 93 | 88.2% |
-| png | 7 | 7 | 100.0% |
+| png | 6 | 6 | 100.0% |
 | psd | 7 | 7 | 100.0% |
 | qtrle | 2 | 2 | 100.0% |
-| svq3 | 1 | 2 | 50.0% |
+| svq3 | 0 | 1 | 0.0% |
 | tga | 0 | 1 | 0.0% |
 | theora | 2 | 2 | 100.0% |
 | tiff | 8 | 8 | 100.0% |
@@ -43,7 +43,6 @@ which only checks that decoding runs without erroring.
 | vc1 | 3 | 9 | 33.3% |
 | vp3 | 1 | 1 | 100.0% |
 | vp6 | 5 | 6 | 83.3% |
-| vp8 | 1 | 1 | 100.0% |
 | webp | 6 | 6 | 100.0% |
 
 ---
