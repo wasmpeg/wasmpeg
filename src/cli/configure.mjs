@@ -420,12 +420,19 @@ async function main() {
         // Both targets get simd128: the webgpu build still runs swscale and every
         // decoder on the CPU, and a GPU-vs-CPU comparison inside one binary is
         // meaningless if only one side is vectorised.
+        // --use-port=zlib, not a bare -lz: a bare -lz only linked locally
+        // because an earlier build's --use-port=zlib had already populated
+        // this machine's emscripten cache with a prebuilt libz.a. On a clean
+        // emsdk install there's nothing for -lz to find, and configure's own
+        // C-compiler sanity check (a trivial main(), linked with these exact
+        // flags) fails before it gets to probing a single codec. Needed on
+        // both cflags (zlib.h) and ldflags (libz.a).
         const extraCflags  = webgpu
-            ? '-O3 -msimd128 --use-port=emdawnwebgpu'
-            : '-O3 -msimd128';
+            ? '-O3 -msimd128 --use-port=emdawnwebgpu --use-port=zlib'
+            : '-O3 -msimd128 --use-port=zlib';
         const extraLdflags = webgpu
-            ? '-O3 -lz --use-port=emdawnwebgpu -s ASYNCIFY -s INITIAL_MEMORY=67108864'
-            : '-O3 -lz';
+            ? '-O3 --use-port=zlib --use-port=emdawnwebgpu -s ASYNCIFY -s INITIAL_MEMORY=67108864'
+            : '-O3 --use-port=zlib';
 
         const content = [
             '#!/bin/bash',
