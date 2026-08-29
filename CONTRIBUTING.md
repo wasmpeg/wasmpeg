@@ -84,7 +84,11 @@ what you touched. See [docs/testing.md](docs/testing.md).
 
 ### Compatibility and correctness (FATE)
 
-Both reports need a `gpl-cpu` build and run against the FATE sample suite:
+Both reports need a `gpl-cpu` build and run against the FATE sample suite. `gpl-cpu`
+is used because it's the build our release CI will cut with the broadest codec set —
+but since `gpl` only adds encoders on top of `lgpl` (same decoders/demuxers/parsers)
+and FATE's coverage/correctness tests are decode-only, the number is identical across
+every build we ship:
 
 ```sh
 make compat    # node tests/compat.mjs — coverage, writes COMPAT.md + results/history.json

@@ -2,6 +2,10 @@
 
 Last run: **2026-08-29** · commit `a52b07f0d9` · WASM **7247 KB**
 
+Measured against the `gpl-cpu` build. `gpl` only adds encoders on top of `lgpl`
+(same decoders, demuxers, parsers) and `webgpu` only adds a filter, so this number
+holds for every build we ship, including the `wasmpeg` (LGPL) package.
+
 ## Overall: 1079/1242 (86.9%)
 
 | Codec | Type | Pass | Total | Rate |

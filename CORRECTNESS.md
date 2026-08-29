@@ -7,6 +7,9 @@ over pure-decode video `framecrc` tests. A test passes only when every frame is
 byte-identical to the reference. This is stricter than [COMPAT.md](COMPAT.md),
 which only checks that decoding runs without erroring.
 
+Measured against the `gpl-cpu` build; holds for every build we ship — see
+[COMPAT.md](COMPAT.md) for why.
+
 ## Overall: 387/415 (93.3%)
 
 | Codec | Correct | Total | Rate |
