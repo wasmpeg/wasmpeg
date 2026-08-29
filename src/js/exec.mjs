@@ -54,6 +54,13 @@ const BOOL_FLAGS = new Set([
     '-vstats', '-noautoscale',
 ]);
 
+// Flags ffmpeg treats as global wherever they appear, rather than binding to
+// the next input or output.
+const GLOBAL_FLAGS = new Set([
+    '-y', '-n', '-hide_banner', '-nostdin', '-nostats', '-stats',
+    '-loglevel', '-v', '-benchmark', '-ignore_unknown', '-xerror', '-bitexact',
+]);
+
 // ── tokenizer ─────────────────────────────────────────────────────────────────
 
 function tokenize(str) {
@@ -119,7 +126,12 @@ export function parseArgs(args) {
 
         const base = baseFlag(tok);
 
-        if (tok === '-i') {
+        if (GLOBAL_FLAGS.has(tok) || GLOBAL_FLAGS.has(base)) {
+            // Value-taking globals (-loglevel, -v) still consume their argument.
+            result.global[tok] = (VALUE_FLAGS.has(tok) || VALUE_FLAGS.has(base))
+                ? (args[++i] ?? '')
+                : true;
+        } else if (tok === '-i') {
             result.inputs.push({ url: args[++i], options: pending });
             pending = {};
         } else if (VALUE_FLAGS.has(tok) || VALUE_FLAGS.has(base)) {
