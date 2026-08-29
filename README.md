@@ -81,7 +81,7 @@ const info = await wasmpeg.probe(file);
 // {
 //   format: 'mov,mp4,m4a,3gp,3g2,mj2',
 //   duration: 12.4,                       // seconds, or null
-//   bitrate: 2_400_000,
+//   bitrate: 2400,                        // kb/s, or -1 if unknown
 //   streams: [{ index: 0, type: 'video' }, { index: 1, type: 'audio' }],
 //   video: { width: 1920, height: 1080, fpsNum: 30000, fpsDen: 1001 },
 //   audio: { sampleRate: 48000, channels: 2 },
