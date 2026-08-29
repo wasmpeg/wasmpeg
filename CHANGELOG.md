@@ -7,9 +7,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- WebGPU is wired into the vendored FFmpeg `configure`, so `--enable-webgpu`
-  now defines `CONFIG_WEBGPU` and builds `hwcontext_webgpu` and the
-  `scale_webgpu` filter. The target had never configured before this.
+- The WebGPU target builds. `--enable-webgpu` is wired into the vendored FFmpeg
+  `configure`, `hwcontext_webgpu.h` is installed, and the emcc link pulls in
+  zlib and simd128. `dist/webgpu.wasm` is 9.34 MiB raw / 3.85 MiB gzipped,
+  against 7.07 MiB / 3.16 MiB for the CPU build. This target had never been
+  configured, compiled or linked before.
 - TypeScript declarations for the public API (`src/js/index.d.ts`).
 - A royalty-free-only build preset (`free`) covering VP8/VP9/AV1/Theora,
   Opus/Vorbis/FLAC, the lossless codecs and the image formats.
