@@ -70,7 +70,8 @@ build_target() {
             -s INITIAL_MEMORY=67108864 \
             -s ALLOW_MEMORY_GROWTH=1 \
             -DCONFIG_WEBGPU \
-            -O3 \
+            -O3 -msimd128 \
+            --use-port=zlib \
             -o "$out_js"
     else
         emcc "$ROOT/src/pipeline.c" \

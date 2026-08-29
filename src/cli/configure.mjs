@@ -424,7 +424,7 @@ async function main() {
             ? '-O3 -msimd128 --use-port=emdawnwebgpu'
             : '-O3 -msimd128';
         const extraLdflags = webgpu
-            ? '-O3 --use-port=emdawnwebgpu -s ASYNCIFY -s INITIAL_MEMORY=67108864'
+            ? '-O3 -lz --use-port=emdawnwebgpu -s ASYNCIFY -s INITIAL_MEMORY=67108864'
             : '-O3 -lz';
 
         const content = [
