@@ -555,6 +555,34 @@ async function testSessionLifecycle() {
         poolErr === null && out?.length === 2 * 2 * 4);
 }
 
+// ── 10. Encode frame budget ──────────────────────────────────────────────────
+
+async function testEncodeBudget() {
+    section('Encode frame budget');
+
+    const { gpu } = await import('../src/js/gpu.js');
+    const wasmpegApi = (await import('../src/js/wasmpeg.mjs')).default;
+    await wasmpegApi.load();
+
+    // Count nextFrame() calls by wrapping the decoder the encoder opens.
+    const realCreate = gpu.createDecoder;
+    let decodes = 0;
+    gpu.createDecoder = (...args) => {
+        const d = realCreate.apply(gpu, args);
+        const realNext = d.nextFrame.bind(d);
+        d.nextFrame = (...a) => { decodes++; return realNext(...a); };
+        return d;
+    };
+
+    try {
+        const png = makeTinyPng(8, 8);
+        await wasmpegApi.encode(png, { codec: 'mjpeg', frames: 1 });
+        ok('encode({frames:1}) decodes exactly one frame', decodes === 1);
+    } finally {
+        gpu.createDecoder = realCreate;
+    }
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -570,6 +598,7 @@ testArgParser();
 await testHighLevel();
 await testExportSurface();
 await testSessionLifecycle();
+await testEncodeBudget();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
