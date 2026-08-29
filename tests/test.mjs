@@ -616,6 +616,29 @@ async function testSingleInstance() {
     ff.terminate();
 }
 
+// ── 12. Filtergraph dimensions ───────────────────────────────────────────────
+
+async function testFiltergraphDimensions() {
+    section('Filtergraph dimensions');
+
+    const { exec } = await import('../src/js/exec.mjs');
+    const src = new Uint8Array(makeTinyPng(16, 8));
+
+    // Each of these must resolve to 8x4 from a 16x8 source. Before expressions
+    // were understood, the unresolvable ones silently fell back to source size.
+    for (const fg of ['scale=8:4', 'scale=-1:4', 'scale=iw/2:ih/2', 'scale=-2:4', 'scale=w=8:h=4']) {
+        const out = await exec(src, ['-vf', fg]);
+        ok(`${fg} yields 8x4`, out.length === 8 * 4 * 4);
+    }
+
+    const half = await exec(src, ['-vf', 'scale=w=4:h=2']);
+    ok('scale=w=4:h=2 yields 4x2', half.length === 4 * 2 * 4);
+
+    // -s WxH shorthand still routes to a scale.
+    const shorthand = await exec(src, ['-s', '4x2']);
+    ok('-s 4x2 yields 4x2', shorthand.length === 4 * 2 * 4);
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -633,6 +656,7 @@ await testExportSurface();
 await testSessionLifecycle();
 await testEncodeBudget();
 await testSingleInstance();
+await testFiltergraphDimensions();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
