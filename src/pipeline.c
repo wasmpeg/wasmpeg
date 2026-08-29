@@ -10,6 +10,7 @@
 #include <libavutil/avutil.h>
 #include <libavutil/channel_layout.h>
 #include <libavutil/frame.h>
+#include <libavutil/audio_fifo.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/log.h>
 #include <libavutil/mathematics.h>
@@ -1077,12 +1078,22 @@ typedef struct {
     struct SwsContext *sws;         /* RGBA → encoder pix_fmt */
     int               width, height;
     int64_t           pts;
+
+    /* audio */
+    int               is_audio;
+    struct SwrContext *swr;         /* f32 interleaved → encoder sample_fmt */
+    AVAudioFifo      *afifo;        /* buffers up to the codec frame size */
+    int               sample_rate;
+    int               channels;
+    int               frame_size;
 } EncoderSession;
 
 static EncoderSession g_enc[MAX_ENCODER_SESSIONS];
 
 static void encoder_cleanup(EncoderSession *s)
 {
+    if (s->afifo) av_audio_fifo_free(s->afifo);
+    swr_free(&s->swr);
     sws_freeContext(s->sws);
     av_packet_free(&s->pkt);
     av_frame_free(&s->frame);
@@ -1228,12 +1239,222 @@ int encoder_push_rgba(int handle, const uint8_t *rgba, int w, int h, int pts_ms)
  * After this call, use encoder_output_ptr/size to read the output bytes.
  * Returns 0 on success, negative AVERROR on failure.
  */
+/*
+ * Open an audio encoder session.
+ *
+ * Input is always 32-bit float, interleaved, at `sample_rate` and `channels` —
+ * the same layout audio_next_samples produces, so a decode/encode round trip
+ * needs no conversion on the JS side. The session resamples to whatever the
+ * codec wants and buffers into the codec's frame size.
+ *
+ * Returns a handle (0..MAX_ENCODER_SESSIONS-1) or a negative AVERROR.
+ */
+EMSCRIPTEN_KEEPALIVE
+int encoder_open_audio(const char *fmt_name, const char *codec_name,
+                       int sample_rate, int channels, int bitrate)
+{
+    if (sample_rate <= 0 || channels <= 0) return AVERROR(EINVAL);
+
+    int slot = -1;
+    for (int i = 0; i < MAX_ENCODER_SESSIONS; i++)
+        if (!g_enc[i].active) { slot = i; break; }
+    if (slot < 0) return AVERROR(ENOMEM);
+
+    EncoderSession *s = &g_enc[slot];
+    memset(s, 0, sizeof(*s));
+    s->is_audio    = 1;
+    s->sample_rate = sample_rate;
+    s->channels    = channels;
+
+    uint8_t *iobuf = av_malloc(65536);
+    if (!iobuf) return AVERROR(ENOMEM);
+    s->avio_ctx = avio_alloc_context(iobuf, 65536, 1,
+                                     &s->wbuf, NULL, writebuf_write, writebuf_seek);
+    if (!s->avio_ctx) { av_free(iobuf); return AVERROR(ENOMEM); }
+
+    int ret = avformat_alloc_output_context2(&s->fmt_ctx, NULL, fmt_name, NULL);
+    if (ret < 0) { encoder_cleanup(s); return ret; }
+    s->fmt_ctx->pb    = s->avio_ctx;
+    s->fmt_ctx->flags |= AVFMT_FLAG_CUSTOM_IO;
+
+    const AVCodec *codec = avcodec_find_encoder_by_name(codec_name);
+    if (!codec) { encoder_cleanup(s); return AVERROR_ENCODER_NOT_FOUND; }
+    if (codec->type != AVMEDIA_TYPE_AUDIO) { encoder_cleanup(s); return AVERROR(EINVAL); }
+
+    s->stream = avformat_new_stream(s->fmt_ctx, NULL);
+    if (!s->stream) { encoder_cleanup(s); return AVERROR(ENOMEM); }
+
+    s->codec_ctx = avcodec_alloc_context3(codec);
+    if (!s->codec_ctx) { encoder_cleanup(s); return AVERROR(ENOMEM); }
+
+    /* Take the codec's first supported sample format and rate. */
+    const enum AVSampleFormat *sfmts = NULL;
+    avcodec_get_supported_config(NULL, codec, AV_CODEC_CONFIG_SAMPLE_FORMAT, 0,
+                                 (const void **)&sfmts, NULL);
+    enum AVSampleFormat sfmt = (sfmts && sfmts[0] != AV_SAMPLE_FMT_NONE)
+                               ? sfmts[0] : AV_SAMPLE_FMT_FLTP;
+
+    const int *rates = NULL;
+    avcodec_get_supported_config(NULL, codec, AV_CODEC_CONFIG_SAMPLE_RATE, 0,
+                                 (const void **)&rates, NULL);
+    int out_rate = sample_rate;
+    if (rates && rates[0]) {
+        int ok = 0;
+        for (int i = 0; rates[i]; i++) if (rates[i] == sample_rate) { ok = 1; break; }
+        if (!ok) out_rate = rates[0];
+    }
+
+    s->codec_ctx->sample_fmt  = sfmt;
+    s->codec_ctx->sample_rate = out_rate;
+    av_channel_layout_default(&s->codec_ctx->ch_layout, channels);
+    s->codec_ctx->time_base   = (AVRational){ 1, out_rate };
+    if (bitrate > 0) s->codec_ctx->bit_rate = bitrate;
+
+    if (s->fmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
+        s->codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+    /* FFmpeg's native Opus and Vorbis encoders are flagged experimental. We
+     * advertise them in the codec list, so accept them rather than refusing. */
+    s->codec_ctx->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
+
+    ret = avcodec_open2(s->codec_ctx, codec, NULL);
+    if (ret < 0) { encoder_cleanup(s); return ret; }
+
+    ret = avcodec_parameters_from_context(s->stream->codecpar, s->codec_ctx);
+    if (ret < 0) { encoder_cleanup(s); return ret; }
+    s->stream->time_base = s->codec_ctx->time_base;
+
+    /* A codec that takes any frame size (PCM, FLAC) reports 0; pick a block. */
+    s->frame_size = s->codec_ctx->frame_size > 0 ? s->codec_ctx->frame_size : 1024;
+
+    AVChannelLayout in_layout;
+    av_channel_layout_default(&in_layout, channels);
+    ret = swr_alloc_set_opts2(&s->swr,
+                              &s->codec_ctx->ch_layout, sfmt, out_rate,
+                              &in_layout, AV_SAMPLE_FMT_FLT, sample_rate,
+                              0, NULL);
+    av_channel_layout_uninit(&in_layout);
+    if (ret < 0) { encoder_cleanup(s); return ret; }
+    ret = swr_init(s->swr);
+    if (ret < 0) { encoder_cleanup(s); return ret; }
+
+    s->afifo = av_audio_fifo_alloc(sfmt, channels, s->frame_size * 2);
+    if (!s->afifo) { encoder_cleanup(s); return AVERROR(ENOMEM); }
+
+    s->frame = av_frame_alloc();
+    if (!s->frame) { encoder_cleanup(s); return AVERROR(ENOMEM); }
+    s->frame->format      = sfmt;
+    s->frame->sample_rate = out_rate;
+    s->frame->nb_samples  = s->frame_size;
+    ret = av_channel_layout_copy(&s->frame->ch_layout, &s->codec_ctx->ch_layout);
+    if (ret < 0) { encoder_cleanup(s); return ret; }
+    ret = av_frame_get_buffer(s->frame, 0);
+    if (ret < 0) { encoder_cleanup(s); return ret; }
+
+    s->pkt = av_packet_alloc();
+    if (!s->pkt) { encoder_cleanup(s); return AVERROR(ENOMEM); }
+
+    ret = avformat_write_header(s->fmt_ctx, NULL);
+    if (ret < 0) { encoder_cleanup(s); return ret; }
+
+    s->active = 1;
+    return slot;
+}
+
+/* Pull whole frames out of the FIFO and encode them. `drain` also emits a
+ * final short frame, which only the last call may produce. */
+static int encoder_drain_audio(EncoderSession *s, int drain)
+{
+    while (av_audio_fifo_size(s->afifo) >= (drain ? 1 : s->frame_size)) {
+        int want = FFMIN(s->frame_size, av_audio_fifo_size(s->afifo));
+
+        int ret = av_frame_make_writable(s->frame);
+        if (ret < 0) return ret;
+        s->frame->nb_samples = want;
+
+        if (av_audio_fifo_read(s->afifo, (void **)s->frame->data, want) < want)
+            return AVERROR_UNKNOWN;
+
+        s->frame->pts = s->pts;
+        s->pts += want;
+
+        ret = avcodec_send_frame(s->codec_ctx, s->frame);
+        if (ret < 0) return ret;
+
+        while (ret >= 0) {
+            ret = avcodec_receive_packet(s->codec_ctx, s->pkt);
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
+            if (ret < 0) return ret;
+            av_packet_rescale_ts(s->pkt, s->codec_ctx->time_base, s->stream->time_base);
+            s->pkt->stream_index = s->stream->index;
+            ret = av_write_frame(s->fmt_ctx, s->pkt);
+            av_packet_unref(s->pkt);
+            if (ret < 0) return ret;
+        }
+    }
+    return 0;
+}
+
+/*
+ * Push interleaved float samples into an audio encoder session.
+ *
+ * `nb_floats` is the total float count, i.e. samples * channels. Returns 0 on
+ * success or a negative AVERROR.
+ */
+EMSCRIPTEN_KEEPALIVE
+int encoder_push_pcm(int handle, const float *pcm, int nb_floats)
+{
+    if (handle < 0 || handle >= MAX_ENCODER_SESSIONS || !g_enc[handle].active)
+        return AVERROR(EINVAL);
+    EncoderSession *s = &g_enc[handle];
+    if (!s->is_audio || !pcm || nb_floats <= 0) return AVERROR(EINVAL);
+
+    const int in_samples = nb_floats / s->channels;
+    if (in_samples <= 0) return AVERROR(EINVAL);
+
+    /* Worst case output count, accounting for rate conversion and any delay. */
+    int out_max = (int)av_rescale_rnd(swr_get_delay(s->swr, s->sample_rate) + in_samples,
+                                      s->codec_ctx->sample_rate, s->sample_rate, AV_ROUND_UP);
+
+    uint8_t **conv = NULL;
+    int ret = av_samples_alloc_array_and_samples(&conv, NULL, s->channels,
+                                                 out_max, s->codec_ctx->sample_fmt, 0);
+    if (ret < 0) return ret;
+
+    const uint8_t *in[1] = { (const uint8_t *)pcm };
+    int got = swr_convert(s->swr, conv, out_max, in, in_samples);
+    if (got < 0) { ret = got; goto done; }
+
+    if (got > 0) {
+        if (av_audio_fifo_realloc(s->afifo, av_audio_fifo_size(s->afifo) + got) < 0) {
+            ret = AVERROR(ENOMEM);
+            goto done;
+        }
+        if (av_audio_fifo_write(s->afifo, (void **)conv, got) < got) {
+            ret = AVERROR_UNKNOWN;
+            goto done;
+        }
+    }
+
+    ret = encoder_drain_audio(s, 0);
+
+done:
+    if (conv) av_freep(&conv[0]);
+    av_freep(&conv);
+    return ret;
+}
+
 EMSCRIPTEN_KEEPALIVE
 int encoder_finish(int handle)
 {
     if (handle < 0 || handle >= MAX_ENCODER_SESSIONS || !g_enc[handle].active)
         return AVERROR(EINVAL);
     EncoderSession *s = &g_enc[handle];
+
+    if (s->is_audio) {
+        int fret = encoder_drain_audio(s, 1);
+        if (fret < 0) return fret;
+    }
 
     int ret = avcodec_send_frame(s->codec_ctx, NULL);
     while (ret >= 0) {
