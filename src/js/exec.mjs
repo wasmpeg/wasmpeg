@@ -7,6 +7,7 @@
  */
 
 import { gpu } from './gpu.js';
+import { formatHint } from './formats.js';
 
 // ── flags ─────────────────────────────────────────────────────────────────────
 
@@ -315,7 +316,9 @@ export async function exec(input, args) {
         const norm = await normalizeInput(input);
         if (norm.rgba)   throw new Error('audio output requires a media file input, not raw pixels');
         if (norm.fspath) throw new Error('audio output from WASM FS path is not yet supported');
-        return gpu.createAudioDecoder(norm.bytes);
+        // Same hinting the high-level decodeAudio() applies: several game and
+        // legacy audio containers carry no magic bytes and only probe by name.
+        return gpu.createAudioDecoder(norm.bytes, formatHint(norm.name));
     }
 
     const norm = await normalizeInput(input);
