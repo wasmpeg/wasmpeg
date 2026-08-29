@@ -214,13 +214,43 @@ function parseSize(s) {
     return { w: parseInt(m[1]), h: parseInt(m[2]) };
 }
 
+// Evaluate one scale= dimension expression against the source size.
+// Supports plain numbers, iw/ih (in_w/in_h) and arithmetic over them. Anything
+// outside that character set is rejected rather than evaluated.
+function evalDimExpr(expr, srcW, srcH) {
+    const e = String(expr).trim()
+        .replace(/\b(?:in_w|iw)\b/g, String(srcW))
+        .replace(/\b(?:in_h|ih)\b/g, String(srcH));
+    if (!/^[0-9+\-*/(). ]+$/.test(e)) return null;
+    try {
+        const v = Function(`"use strict";return (${e});`)();
+        return Number.isFinite(v) ? v : null;
+    } catch { return null; }
+}
+
 // Extract output dimensions from a filtergraph string.
 // Returns { w, h } if determinable, null otherwise.
-function fgDimensions(fg) {
-    // scale=W:H or scale=w=W:h=H
-    const m = fg.match(/(?:^|,)scale(?:_webgpu)?=(?:w=)?(\d+)(?::h=|:)(\d+)/);
-    if (m) return { w: parseInt(m[1]), h: parseInt(m[2]) };
-    return null;
+function fgDimensions(fg, srcW = 0, srcH = 0) {
+    // scale=W:H or scale=w=W:h=H, where either side may be an expression.
+    const m = fg.match(/(?:^|,)scale(?:_webgpu)?=(?:w=)?([^:,]+)(?::h=|:)([^:,\]]+)/);
+    if (!m) return null;
+
+    let w = evalDimExpr(m[1], srcW, srcH);
+    let h = evalDimExpr(m[2], srcW, srcH);
+    if (w === null || h === null) return null;
+
+    // A negative value means "preserve aspect, rounded to a multiple of |n|".
+    const fit = (n, known, srcKnown, srcOther) => {
+        const mult = Math.abs(n) || 1;
+        if (!srcKnown) return null;
+        const exact = (known * srcOther) / srcKnown;
+        return Math.max(mult, Math.round(exact / mult) * mult);
+    };
+    if (w < 0 && h > 0)      w = fit(w, h, srcH, srcW);
+    else if (h < 0 && w > 0) h = fit(h, w, srcW, srcH);
+
+    if (!(w > 0 && h > 0)) return null;
+    return { w: Math.round(w), h: Math.round(h) };
 }
 
 // ── dispatch ─────────────────────────────────────────────────────────────────
@@ -301,7 +331,7 @@ export async function exec(input, args) {
         // Determine output dimensions
         let dstW = srcW, dstH = srcH;
         if (filtergraph) {
-            const dims = fgDimensions(filtergraph);
+            const dims = fgDimensions(filtergraph, srcW, srcH);
             if (dims) { dstW = dims.w; dstH = dims.h; }
         }
 
