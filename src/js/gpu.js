@@ -37,26 +37,38 @@
 let _mod    = null;
 let _hasGPU = false;
 
-async function load({ wasmPath } = {}) {
-    if (_mod) return;
-
-    _hasGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
-
-    const path = wasmPath ?? (
-        _hasGPU
-            ? new URL('../../dist/webgpu.js', import.meta.url).href
-            : new URL('../../dist/cpu.js',    import.meta.url).href
-    );
-
+async function instantiate(path) {
     const isNode = typeof process !== 'undefined' && process.versions?.node;
     let nodeOpts = {};
     if (isNode) {
         const { default: fsMod } = await import('node:fs');
         nodeOpts = { wasmBinary: fsMod.readFileSync(new URL(path).pathname.replace(/\.js$/, '.wasm')) };
     }
-
     const { default: factory } = await import(/* @vite-ignore */ path);
-    _mod = await factory(nodeOpts);
+    return factory(nodeOpts);
+}
+
+async function load({ wasmPath } = {}) {
+    if (_mod) return;
+
+    _hasGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
+
+    if (wasmPath) { _mod = await instantiate(wasmPath); return; }
+
+    if (_hasGPU) {
+        // The WebGPU binary is optional — a package may ship CPU-only. Falling
+        // back keeps load() working in exactly the browsers we target, instead
+        // of failing on a missing artifact. Clearing the flag matters: the CPU
+        // build does not export pipeline_run_rgba_gpu.
+        try {
+            _mod = await instantiate(new URL('../../dist/webgpu.js', import.meta.url).href);
+            return;
+        } catch {
+            _hasGPU = false;
+        }
+    }
+
+    _mod = await instantiate(new URL('../../dist/cpu.js', import.meta.url).href);
 }
 
 function assertLoaded() {
