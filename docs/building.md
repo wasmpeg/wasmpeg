@@ -87,3 +87,18 @@ cd vendor/ffmpeg && emmake make -j$(nproc) install && cd ../..
 ```
 
 > **Note:** The first time you build with `--use-port=zlib`, Emscripten downloads and caches the port. Seed it once before a full offline build: `emcc --use-port=zlib -o /dev/null /dev/null 2>/dev/null`
+
+## Build targets and sizes
+
+| Target | Command | Output | Raw | gzip |
+|--------|---------|--------|----:|-----:|
+| CPU    | `PRESET=lgpl TARGET=cpu bash scripts/build.sh`    | `dist/cpu.js` + `dist/cpu.wasm`       | 7.07 MiB | 3.16 MiB |
+| WebGPU | `PRESET=lgpl TARGET=webgpu bash scripts/build.sh` | `dist/webgpu.js` + `dist/webgpu.wasm` | 9.34 MiB | 3.85 MiB |
+
+The WebGPU target carries the Dawn bindings and links with `ASYNCIFY`, which is
+where its extra ~2.3 MiB comes from. It needs no separate Dawn checkout: the
+`emdawnwebgpu` Emscripten port is fetched on first build. Both targets compile
+with `-msimd128` and link zlib.
+
+Run `bash tests/size.sh` to measure the current tree rather than trusting this
+table.

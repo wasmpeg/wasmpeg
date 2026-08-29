@@ -1,7 +1,7 @@
 # wasmpeg
 
 **FFmpeg for the browser, built for the decode → display loop.** Load a video, get
-RGBA frames, scale them on the GPU, probe metadata, grab thumbnails — from a 2.9 MB
+RGBA frames, scale them on the GPU, probe metadata, grab thumbnails — from a 3.2 MB
 gzipped WASM, with **no SharedArrayBuffer and no COOP/COEP headers** required.
 
 ```js
