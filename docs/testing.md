@@ -13,7 +13,7 @@ node tests/test.mjs
 A clean build ends with a summary line:
 
 ```
-183 tests — 182 passed, 0 failed, 1 skipped
+231 tests — 229 passed, 0 failed, 2 skipped
 ```
 
 The count grows as tests are added; what matters is `0 failed`. The skip is the
