@@ -1,6 +1,6 @@
 # FATE Decode Correctness
 
-Last run: **2026-06-10** · commit `edcde15f14`
+Last run: **2026-08-29** · commit `f8bc5f4a2a`
 
 Exact per-frame Adler-32 match against FFmpeg's vendored FATE reference output,
 over pure-decode video `framecrc` tests. A test passes only when every frame is
