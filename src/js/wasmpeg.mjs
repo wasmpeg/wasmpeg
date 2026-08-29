@@ -178,6 +178,39 @@ async function encode(input, opts = {}) {
 }
 
 /**
+ * Decode the audio of an input and re-encode it.
+ *
+ *   const flac = await wasmpeg.encodeAudio(file, { fmt: 'flac', codec: 'flac' });
+ *
+ * opts:
+ *   fmt     — container/muxer (default 'wav')
+ *   codec   — encoder name (default 'pcm_s16le')
+ *   bitrate — target bitrate in bits/s (0 = codec default)
+ *   format  — force the input demuxer
+ *
+ * Returns a Uint8Array of the encoded container bytes.
+ */
+async function encodeAudio(input, opts = {}) {
+    assertLoaded();
+    const dec = await decodeAudio(input, { format: opts.format });
+    const enc = gpu.createAudioEncoder({
+        fmt:        opts.fmt   ?? 'wav',
+        codec:      opts.codec ?? 'pcm_s16le',
+        sampleRate: dec.sampleRate,
+        channels:   dec.channels,
+        bitrate:    opts.bitrate ?? 0,
+    });
+    try {
+        let chunk;
+        while ((chunk = dec.nextSamples())) enc.pushPcm(chunk);
+        return enc.finish();
+    } finally {
+        enc.close();
+        dec.close();
+    }
+}
+
+/**
  * Run an ffmpeg-style command.
  */
 async function run(input, args) {
@@ -185,4 +218,4 @@ async function run(input, args) {
     return exec(input, args);
 }
 
-export default { load, scale, decode, decodeAudio, probe, encode, run };
+export default { load, scale, decode, decodeAudio, probe, encode, encodeAudio, run };

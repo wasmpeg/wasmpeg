@@ -36,6 +36,24 @@ export interface Encoder {
     close(): void;
 }
 
+export interface AudioEncoder {
+    /** Interleaved Float32 samples, as produced by an AudioDecoder. */
+    pushPcm(samples: Float32Array | ArrayLike<number>): void;
+    finish(): Uint8Array;
+    close(): void;
+}
+
+export interface EncodeAudioOptions {
+    /** Container/muxer name. Defaults to 'wav'. */
+    fmt?: string;
+    /** Encoder name. Defaults to 'pcm_s16le'. */
+    codec?: string;
+    /** Target bitrate in bits/s. 0 uses the codec default. */
+    bitrate?: number;
+    /** Force an input demuxer. */
+    format?: string;
+}
+
 export type StreamType = 'video' | 'audio' | 'data' | 'subtitle' | 'attachment' | 'unknown';
 
 export interface ProbeResult {
@@ -77,6 +95,7 @@ export interface Wasmpeg {
     decodeAudio(input: WasmpegInput, opts?: { format?: string }): Promise<AudioDecoder>;
     probe(input: WasmpegInput): Promise<ProbeResult>;
     encode(input: WasmpegInput, opts?: EncodeOptions): Promise<Uint8Array>;
+    encodeAudio(input: WasmpegInput, opts?: EncodeAudioOptions): Promise<Uint8Array>;
     run(input: WasmpegInput, args: string | string[]): Promise<Uint8ClampedArray | Decoder>;
 }
 
@@ -116,6 +135,10 @@ export interface Gpu {
     createAudioDecoder(fileBytes: Uint8Array, fmtName?: string): AudioDecoder;
     probe(fileBytes: Uint8Array): ProbeResult;
     createEncoder(opts: { fmt: string; codec: string; width?: number; height?: number; fps?: Fps; bitrate?: number }): Encoder;
+    createAudioEncoder(opts: { fmt: string; codec: string; sampleRate: number; channels: number; bitrate?: number }): AudioEncoder;
+    createGpuSession(opts: { srcW: number; srcH: number; dstW: number; dstH: number; filtergraph?: string }): { run(rgba: Uint8Array | Uint8ClampedArray): Uint8ClampedArray; close(): void };
+    releaseCachedSession(): void;
+    benchGpuSession(srcW: number, srcH: number, dstW: number, dstH: number, iters: number): number;
     hasWebGPU(): boolean;
     benchGpu(srcW: number, srcH: number, dstW: number, dstH: number, iters: number): number;
     benchCpu(srcW: number, srcH: number, dstW: number, dstH: number, iters: number): number;

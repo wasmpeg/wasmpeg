@@ -415,12 +415,66 @@ function benchCpu(srcW, srcH, dstW, dstH, iters) {
         ['number','number','number','number','number'], [srcW, srcH, dstW, dstH, iters]);
 }
 
+/**
+ * Open an audio encoder.
+ *
+ * Input is interleaved Float32 at `sampleRate`/`channels` — the same layout
+ * createAudioDecoder() yields, so a decode/encode round trip needs no
+ * conversion here.
+ *
+ * Returns { pushPcm(f32), finish() -> Uint8Array, close() }.
+ */
+function createAudioEncoder({ fmt, codec, sampleRate, channels, bitrate = 0 } = {}) {
+    assertLoaded();
+    if (!fmt)   throw new Error('createAudioEncoder: fmt is required');
+    if (!codec) throw new Error('createAudioEncoder: codec is required');
+    if (!sampleRate || !channels) throw new Error('createAudioEncoder: sampleRate and channels are required');
+
+    const handle = _mod.ccall('encoder_open_audio', 'number',
+        ['string','string','number','number','number'],
+        [fmt, codec, sampleRate, channels, bitrate]);
+    if (handle < 0) throw new Error(`encoder_open_audio failed: ${handle}`);
+
+    let buf = 0, bufFloats = 0;
+    let closed = false;
+
+    return {
+        pushPcm(samples) {
+            if (closed) throw new Error('audio encoder is closed');
+            const f32 = samples instanceof Float32Array ? samples : Float32Array.from(samples);
+            if (f32.length > bufFloats) {
+                if (buf) _mod._free(buf);
+                buf = _mod._malloc(f32.length * 4);
+                bufFloats = f32.length;
+            }
+            _mod.HEAPU8.set(new Uint8Array(f32.buffer, f32.byteOffset, f32.byteLength), buf);
+            const ret = _mod.ccall('encoder_push_pcm', 'number',
+                ['number','number','number'], [handle, buf, f32.length]);
+            if (ret < 0) throw new Error(`encoder_push_pcm failed: ${ret}`);
+        },
+        finish() {
+            if (closed) throw new Error('audio encoder is closed');
+            const ret = _mod.ccall('encoder_finish', 'number', ['number'], [handle]);
+            if (ret < 0) throw new Error(`encoder_finish failed: ${ret}`);
+            const size = _mod.ccall('encoder_output_size', 'number', ['number'], [handle]);
+            const ptr  = _mod.ccall('encoder_output_ptr',  'number', ['number'], [handle]);
+            return new Uint8Array(_mod.HEAPU8.buffer, ptr, size).slice();
+        },
+        close() {
+            if (closed) return;
+            closed = true;
+            if (buf) _mod._free(buf);
+            _mod.ccall('encoder_close', null, ['number'], [handle]);
+        },
+    };
+}
+
 export const gpu = {
     load, scale, onLog, offLog,
     createGpuSession, releaseCachedSession: _releaseCached,
     benchGpuSession,
     createDecoder, createDecoderFile,
-    createAudioDecoder, probe, createEncoder,
+    createAudioDecoder, probe, createEncoder, createAudioEncoder,
     hasWebGPU, benchGpu, benchCpu,
     get FS() { return _mod && _mod.FS; },
 };
