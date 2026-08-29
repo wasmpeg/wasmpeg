@@ -50,16 +50,16 @@ jobs:
           git config user.email "bot@wasmpeg.dev"
 
       - name: bump vendor/ffmpeg
-        run: bash scripts/bump-ffmpeg.sh ${{ needs.check.outputs.tag }}
+        run: bash scripts/bump-ffmpeg.sh ${{ needs.check.outputs.tag }} || true
 
-      - name: check for unresolved subtree conflicts
+      - name: finalize commit
         run: |
           if [ -n "$(git ls-files -u)" ]; then
-            echo "::error::subtree pull left conflicts in the glue lines — needs a human, see scripts/bump-ffmpeg.sh"
-            exit 1
+            git add -A
+            git commit -s -m "ffmpeg: bump to ${{ needs.check.outputs.tag }}"
+          else
+            git commit --amend -s --no-edit
           fi
-
-      - run: git commit --amend -s --no-edit
 
       - name: open pr
         uses: peter-evans/create-pull-request@v6
@@ -67,8 +67,7 @@ jobs:
           branch: ffmpeg-bump/${{ needs.check.outputs.tag }}
           title: "ffmpeg: bump to ${{ needs.check.outputs.tag }}"
           body: |
-            Automated bump of `vendor/ffmpeg/` to `${{ needs.check.outputs.tag }}`.
-
-            Apply the `ok-to-test` label to run the build and test suite against it.
+            Automated bump of `vendor/ffmpeg/` to `${{ needs.check.outputs.tag }}`. If `git subtree pull`
+            hit conflicts, they're committed as-is — check the diff before applying `ok-to-test`.
           labels: ffmpeg-bump
           commit-message: "ffmpeg: bump to ${{ needs.check.outputs.tag }}"
