@@ -106,15 +106,18 @@ function scale(srcRgba, srcW, srcH, dstW, dstH, filtergraph) {
     const srcPtr = allocBytes(srcRgba);
     const dstPtr = _mod._malloc(dstW * dstH * 4);
 
-    const ret = _mod.ccall(fn, 'number',
-        ['number','number','number','number','number','number','string'],
-        [srcPtr, srcW, srcH, dstPtr, dstW, dstH, fg]);
-
-    const out = new Uint8ClampedArray(_mod.HEAPU8.buffer, dstPtr, dstW * dstH * 4).slice();
-    _mod._free(srcPtr);
-    _mod._free(dstPtr);
-    if (ret !== 0) throw new Error(`scale failed: ${ret}`);
-    return out;
+    // Free in a finally: an abort inside the filtergraph would otherwise leak
+    // both buffers, and a filter op is easy to call in a loop.
+    try {
+        const ret = _mod.ccall(fn, 'number',
+            ['number','number','number','number','number','number','string'],
+            [srcPtr, srcW, srcH, dstPtr, dstW, dstH, fg]);
+        if (ret !== 0) throw new Error(`scale failed: ${ret}`);
+        return new Uint8ClampedArray(_mod.HEAPU8.buffer, dstPtr, dstW * dstH * 4).slice();
+    } finally {
+        _mod._free(srcPtr);
+        _mod._free(dstPtr);
+    }
 }
 
 /* ── video decoder ───────────────────────────────────────────────────────── */
