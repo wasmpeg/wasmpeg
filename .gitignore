@@ -27,22 +27,8 @@ vendor/ffmpeg/config_components.h
 # emscripten cache
 .emscripten_cache/
 
-# local-only dev tools (browser testing deferred; see docs)
-tests/browser-test.html
-
 # fate test samples (local only, rsynced on demand)
 fate-suite/
-
-
-# AI agent session data
-.claude/
-.cursor/
-.aider*
-.copilot/
-.continue/
-.codeium/
-AGENTS.md
-CLAUDE.md
 
 # OS
 .DS_Store
