@@ -97,7 +97,10 @@ async function probe(input) {
 }
 
 /**
- * Encode frames or transcode a file.
+ * Encode frames to an image or media container.
+ *
+ * This is an encode path, not a transcode path: it pulls RGBA frames from the
+ * input and re-encodes them. It does not remux or copy streams.
  *
  * For single-frame image encode (e.g. grab a JPEG thumbnail):
  *   const jpgBytes = await wasmpeg.encode(file, { fmt: 'image2', codec: 'mjpeg', width: 320, height: 240 });
