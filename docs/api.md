@@ -138,6 +138,20 @@ Decodes the next frame and copies it out in its **native pixel format**, packed 
 
 Returns the byte count written (`> 0`) on success, `0` at end of stream, negative `AVERROR` on error. Size `dst` at `width * height * 8` to fit any pixel format; the function returns `AVERROR(ENOMEM)` if `dst_cap` is too small.
 
+#### `decoder_seek`
+
+```c
+int decoder_seek(int handle, int ms);
+```
+
+Seeks to `ms` milliseconds from the start of the video stream and flushes the
+codec. Lands on the nearest keyframe at or before the target, so the next
+`decoder_next_frame` may return a frame earlier than requested — this is a
+container seek, not frame-accurate seeking.
+
+Returns `0` on success, negative `AVERROR` on failure. In JS the decoder wrapper
+exposes it as `seek(ms)`, which clamps a negative target to the start.
+
 #### `decoder_close`
 
 ```c

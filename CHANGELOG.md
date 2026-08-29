@@ -18,7 +18,10 @@ All notable changes to this project are documented here. The format follows
 - `gpu.onLog()` / `gpu.offLog()` for subscribing to module stdout/stderr.
 - `-vframes` / `-frames` now cap a decode-only `exec()`.
 - `probe()` and `decodeAudio()` accept WASM filesystem paths, matching `decode()`.
+- `decoder_seek()` in the C ABI, `seek(ms)` on the JS decoder, and `-ss` / `-t`
+  / `-to` support in decode-only `exec()`.
 - CI: build, `make verify`, and a DCO sign-off check on pull requests.
+- A `.editorconfig` and a changelog.
 
 ### Fixed
 - `import wasmpeg from 'wasmpeg'` returned `undefined`; the package had no
