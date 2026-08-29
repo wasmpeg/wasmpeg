@@ -639,6 +639,29 @@ async function testFiltergraphDimensions() {
     ok('-s 4x2 yields 4x2', shorthand.length === 4 * 2 * 4);
 }
 
+// ── 13. Boolean flag handling ────────────────────────────────────────────────
+
+function testBoolFlags() {
+    section('Boolean flags');
+
+    // Each of these takes no value; if the parser treats one as value-taking it
+    // eats the output filename and the command loses its destination.
+    const noValue = ['-nostats', '-stats', '-dn', '-ignore_unknown', '-bitexact',
+                     '-autorotate', '-noautorotate', '-xerror', '-fix_sub_duration',
+                     '-vstats', '-noautoscale', '-y', '-an', '-vn', '-sn',
+                     '-hide_banner', '-nostdin', '-shortest'];
+
+    for (const flag of noValue) {
+        const p = parseArgs(['-i', 'in.mp4', flag, 'out.mp4']);
+        ok(`${flag} leaves the output url intact`, p.outputs[0]?.url === 'out.mp4');
+    }
+
+    // Value-taking flags must still consume their argument.
+    const p = parseArgs(['-i', 'in.mp4', '-vf', 'scale=2:2', 'out.mp4']);
+    ok('-vf consumes its value', p.outputs[0]?.options['-vf'] === 'scale=2:2');
+    ok('-vf does not eat the output', p.outputs[0]?.url === 'out.mp4');
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -657,6 +680,7 @@ await testSessionLifecycle();
 await testEncodeBudget();
 await testSingleInstance();
 await testFiltergraphDimensions();
+testBoolFlags();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
