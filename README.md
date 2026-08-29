@@ -1,8 +1,13 @@
 # wasmpeg
 
+![License](https://img.shields.io/badge/license-LGPL--2.1--or--later-blue)
+![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
+![Status](https://img.shields.io/badge/status-pre--release-orange)
+
 **FFmpeg for the browser, built for the decode → display loop.** Load a video, get
-RGBA frames, scale them on the GPU, probe metadata, grab thumbnails — from a 3.2 MB
-gzipped WASM, with **no SharedArrayBuffer and no COOP/COEP headers** required.
+RGBA frames, scale them on the GPU, probe metadata, grab thumbnails, transcode to a
+handful of common formats — from a 3.2 MB gzipped WASM, with **no SharedArrayBuffer
+and no COOP/COEP headers** required.
 
 ```js
 import wasmpeg from 'wasmpeg';
@@ -18,10 +23,25 @@ while ((frame = dec.nextFrame())) {
 dec.close();
 ```
 
-wasmpeg focuses on the decode side: pulling frames, audio, and metadata out of media
-files, plus single-frame encode for thumbnails. It runs in modern browsers and in
-Node ≥ 18, loads without cross-origin isolation, and scales frames on the GPU when
-WebGPU is available (falling back to CPU otherwise).
+wasmpeg pulls frames, audio, and metadata out of media files, and encodes back out
+to images, lossless video, and a few common audio formats. It runs in modern
+browsers and in Node ≥ 18, loads without cross-origin isolation, and scales frames
+on the GPU when WebGPU is available (falling back to CPU otherwise).
+
+### vs. ffmpeg.wasm
+
+|                          | wasmpeg                       | ffmpeg.wasm                     |
+|--------------------------|--------------------------------|----------------------------------|
+| `.wasm` size (raw)       | 7.1 MB                        | 61.7 MB (`@ffmpeg/core`)        |
+| Cross-origin isolation   | Not required                  | Required for the threaded core  |
+| GPU-accelerated filters  | Yes, via WebGPU                | No                               |
+| Interface                | Typed decode/scale/probe/encode API | Real `ffmpeg` CLI, any command line |
+
+wasmpeg trades the full CLI for a smaller, typed API and a filter path that runs on
+the GPU instead of needing `SharedArrayBuffer` threads to be fast. If you're running
+arbitrary multi-input `ffmpeg` command lines, ffmpeg.wasm's CLI is still the better
+fit; if you're decoding, scaling, probing, or doing a straightforward transcode, this
+is built for that.
 
 ---
 
@@ -117,6 +137,12 @@ const jpg = await wasmpeg.encode(file, { codec: 'mjpeg', frames: 1 });
 const png = await wasmpeg.encode(canvas, { codec: 'png' });
 ```
 
+### Re-encode audio
+
+```js
+const flac = await wasmpeg.encodeAudio(file, { fmt: 'flac', codec: 'flac' });
+```
+
 ---
 
 ## Familiar FFmpeg class API
@@ -182,9 +208,9 @@ per-codec breakdown lives in [COMPAT.md](COMPAT.md). The main formats:
 wasmpeg runs against FFmpeg's own FATE sample suite on two axes:
 
 - **Coverage** ([COMPAT.md](COMPAT.md)) — does a file decode without erroring? Currently **86.9%** of 1242 tests.
-- **Correctness** ([CORRECTNESS.md](CORRECTNESS.md)) — does the decode match FFmpeg byte-for-byte? Each frame's checksum is compared to FFmpeg's vendored reference output. Currently **92%** of the pure-decode video tests.
+- **Correctness** ([CORRECTNESS.md](CORRECTNESS.md)) — does the decode match FFmpeg byte-for-byte? Each frame's checksum is compared to FFmpeg's vendored reference output. Currently **93.3%** of the pure-decode video tests.
 
-The second number is the one that matters: it's not "does it run," it's "does it produce the exact right pixels." Both are tracked over time in [tests/results/](tests/results/).
+The second number is the one that matters: it's not "does it run," it's "does it produce the exact right pixels." Both are measured against the broadest build we ship and hold for every one of them — decoders and demuxers don't vary by preset. Both are tracked over time in [tests/results/](tests/results/).
 
 ---
 
