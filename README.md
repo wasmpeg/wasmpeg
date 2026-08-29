@@ -27,12 +27,18 @@ WebGPU is available (falling back to CPU otherwise).
 
 ## Install
 
+Not on npm yet. Until the first release, install from git and build once:
+
 ```sh
-npm install wasmpeg          # LGPL — safe for commercial / closed-source
-npm install wasmpeg-full     # GPL  — adds H.264/H.265 encode (libx264/libx265)
+git clone https://github.com/wasmpeg/wasmpeg
+cd wasmpeg && bash scripts/build.sh   # needs the Emscripten SDK
 ```
 
-No build step, no special server headers, no worker setup.
+The published packages will be `wasmpeg` (LGPL, safe for commercial and
+closed-source use) and `wasmpeg-full` (GPL, adds H.264/H.265 encode via
+libx264/libx265).
+
+No special server headers and no worker setup are required at runtime.
 
 ---
 
@@ -164,7 +170,7 @@ per-codec breakdown lives in [COMPAT.md](COMPAT.md). The main formats:
 | **Audio decode** | AAC, Opus, MP3, Vorbis, FLAC, AC-3, E-AC-3, DTS, TrueHD, ALAC, WMA, WavPack, and more |
 | **Image** | PNG, JPEG, JPEG-2000, WebP, TIFF, BMP, GIF, EXR, PSD, DPX, TGA |
 | **Video encode** | MJPEG, PNG, GIF, BMP, TIFF, HuffYUV, FFV1 — plus **H.264/H.265** in `wasmpeg-full` |
-| **Audio encode** | AAC, Opus, FLAC, MP2, WavPack, PCM variants |
+| **Audio encode** | AAC, Opus, FLAC, MP2, WavPack, PCM variants — compiled in, but the encode API is video-only today |
 | **Containers** | MP4, MKV, WebM, AVI, OGG, MPEG-TS, FLV, ASF, WAV, FLAC, and more |
 
 ### How we measure it
