@@ -46,3 +46,39 @@ export function formatHint(nameOrPath) {
     const ext = nameOrPath.split('.').pop()?.toLowerCase();
     return EXT_FMT[ext] ?? PATH_FMT.find(([re]) => re.test(nameOrPath))?.[1];
 }
+
+/**
+ * Output extension → { fmt, codec } for transcoding.
+ *
+ * Only formats this build can actually encode are listed. There is no H.264,
+ * HEVC, VP8/VP9 or AV1 encoder in the LGPL build, so .mp4/.webm are absent on
+ * purpose: naming one should fail with a clear message rather than produce a
+ * container the decoder side cannot fill.
+ */
+export const OUT_FMT = {
+    // still images and animation
+    gif:  { fmt: 'gif',        codec: 'gif' },
+    png:  { fmt: 'image2pipe', codec: 'png' },
+    jpg:  { fmt: 'image2pipe', codec: 'mjpeg' },
+    jpeg: { fmt: 'image2pipe', codec: 'mjpeg' },
+    bmp:  { fmt: 'image2pipe', codec: 'bmp' },
+    tif:  { fmt: 'image2pipe', codec: 'tiff' },
+    tiff: { fmt: 'image2pipe', codec: 'tiff' },
+    tga:  { fmt: 'image2pipe', codec: 'targa' },
+    dpx:  { fmt: 'image2pipe', codec: 'dpx' },
+    // lossless video
+    avi:  { fmt: 'avi',      codec: 'ffv1' },
+    mkv:  { fmt: 'matroska', codec: 'ffv1' },
+    // audio
+    wav:  { fmt: 'wav',  codec: 'pcm_s16le', audio: true },
+    flac: { fmt: 'flac', codec: 'flac',      audio: true },
+    ogg:  { fmt: 'ogg',  codec: 'opus',      audio: true },
+    opus: { fmt: 'ogg',  codec: 'opus',      audio: true },
+};
+
+/** Look up an output target by filename. Returns undefined when unsupported. */
+export function outputTarget(nameOrPath) {
+    if (!nameOrPath) return undefined;
+    const ext = nameOrPath.split('.').pop()?.toLowerCase();
+    return ext ? OUT_FMT[ext] : undefined;
+}
