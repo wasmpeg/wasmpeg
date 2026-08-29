@@ -155,8 +155,11 @@ async function encode(input, opts = {}) {
             enc.pushRgba(norm.rgba, srcW, srcH, 0);
         } else {
             for (;;) {
+                // Check the budget before decoding, not after: the old order
+                // decoded one frame past `frames` and threw it away.
+                if (frameCount >= maxFrames) break;
                 const frame = dec.nextFrame(srcW, srcH);
-                if (!frame || frameCount >= maxFrames) break;
+                if (!frame) break;
                 enc.pushRgba(frame, srcW, srcH, ptsMs);
                 ptsMs += frameMs;
                 frameCount++;
