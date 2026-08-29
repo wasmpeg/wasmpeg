@@ -7,16 +7,22 @@
  *   await ff.writeFile('input.mp4', data);
  *   await ff.exec(['-i', 'input.mp4', 'output.webm']);
  *   const out = await ff.readFile('output.webm');
+ *
+ * This class is a thin surface over the same module `gpu` and `exec()` use.
+ * Loading a second instance would double the ~7 MB of resident wasm and give
+ * writeFile() a filesystem that exec() cannot see.
  */
 
-import { exec } from './exec.mjs';
+import { exec, parseArgs } from './exec.mjs';
+import { gpu } from './gpu.js';
 
 export class FFmpeg {
-    #mod    = null;
+    #loaded = false;
     #log    = [];
     #prog   = [];
+    #unsub  = null;
 
-    get loaded() { return this.#mod !== null; }
+    get loaded() { return this.#loaded; }
 
     on(event, handler) {
         if (event === 'log')      this.#log.push(handler);
@@ -31,91 +37,58 @@ export class FFmpeg {
     }
 
     async load({ wasmPath } = {}) {
-        if (this.#mod) return;
+        if (this.#loaded) return;
+        await gpu.load(wasmPath ? { wasmPath } : {});
 
-        // Mirrors gpu.load(): the WebGPU artifact is optional, so prefer it
-        // when the browser advertises support but never hard-fail on it.
-        const candidates = wasmPath
-            ? [wasmPath]
-            : (typeof navigator !== 'undefined' && navigator.gpu
-                ? [new URL('../../dist/webgpu.js', import.meta.url).href,
-                   new URL('../../dist/cpu.js',    import.meta.url).href]
-                : [new URL('../../dist/cpu.js',    import.meta.url).href]);
-
-        const emit = (type, message) => this.#log.forEach(h => h({ type, message }));
-
-        // Node.js 18+ has a built-in fetch(), which Emscripten 3.1.6 doesn't
-        // anticipate. Passing wasmBinary directly bypasses the fetch/readFile
-        // path entirely and works in both browser and Node.
-        const isNode = typeof process !== 'undefined' && process.versions?.node;
-        let factory = null, nodeOpts = {};
-        for (const cand of candidates) {
-            try {
-                nodeOpts = {};
-                if (isNode) {
-                    const { default: fsMod } = await import('node:fs');
-                    nodeOpts = { wasmBinary: fsMod.readFileSync(new URL(cand).pathname.replace(/\.js$/, '.wasm')) };
-                }
-                ({ default: factory } = await import(/* @vite-ignore */ cand));
-                break;
-            } catch (e) {
-                if (cand === candidates[candidates.length - 1]) throw e;
+        this.#unsub = gpu.onLog(({ type, message }) => {
+            for (const h of this.#log) h({ type, message });
+            if (type === 'stderr') {
+                const m = message.match(/time=(\S+)/);
+                if (m) for (const h of this.#prog) h({ progress: m[1] });
             }
-        }
-        this.#mod = await factory({
-            print:    msg => emit('stdout', msg),
-            printErr: msg => {
-                emit('stderr', msg);
-                const m = msg.match(/time=(\S+)/);
-                if (m) this.#prog.forEach(h => h({ progress: m[1] }));
-            },
-            ...nodeOpts,
         });
+
+        this.#loaded = true;
     }
 
-    #assertLoaded() {
-        if (!this.#mod) throw new Error('call load() first');
+    #fs() {
+        if (!this.#loaded) throw new Error('call load() first');
+        return gpu.FS;
     }
 
     async writeFile(path, data) {
-        this.#assertLoaded();
         const buf = data instanceof Uint8Array ? data : new Uint8Array(await data.arrayBuffer());
-        this.#mod.FS.writeFile(path, buf);
+        this.#fs().writeFile(path, buf);
     }
 
-    async readFile(path) {
-        this.#assertLoaded();
-        return this.#mod.FS.readFile(path);
-    }
-
-    async deleteFile(path) {
-        this.#assertLoaded();
-        this.#mod.FS.unlink(path);
-    }
-
-    async createDir(path) {
-        this.#assertLoaded();
-        this.#mod.FS.mkdir(path);
-    }
-
-    async listDir(path) {
-        this.#assertLoaded();
-        return this.#mod.FS.readdir(path);
-    }
+    async readFile(path)   { return this.#fs().readFile(path); }
+    async deleteFile(path) { this.#fs().unlink(path); }
+    async createDir(path)  { this.#fs().mkdir(path); }
+    async listDir(path)    { return this.#fs().readdir(path); }
 
     async exec(args, { timeout = 0 } = {}) {
-        this.#assertLoaded();
-        // Resolve -i input from the WASM FS, dispatch through the wasmpeg pipeline.
-        const parsed = (await import('./exec.mjs')).parseArgs(args);
+        const fs     = this.#fs();
+        const parsed = parseArgs(args);
         const inputPath = parsed.inputs[0]?.url;
         if (!inputPath) throw new Error('exec(): no -i input specified');
-        const inputBytes = this.#mod.FS.readFile(inputPath);
-        return exec(inputBytes, args);
+        const inputBytes = fs.readFile(inputPath);
+        const run = exec(inputBytes, args);
+        if (!timeout) return run;
+        return Promise.race([
+            run,
+            new Promise((_, reject) =>
+                setTimeout(() => reject(new Error(`exec() timed out after ${timeout}ms`)), timeout)),
+        ]);
     }
 
     terminate() {
-        this.#mod = null;
-        this.#log = [];
-        this.#prog = [];
+        // The module is shared, so this releases only what this instance owns:
+        // its log subscription and its listeners. Sessions opened by exec() are
+        // closed by exec() itself.
+        this.#unsub?.();
+        this.#unsub  = null;
+        this.#loaded = false;
+        this.#log    = [];
+        this.#prog   = [];
     }
 }
