@@ -98,6 +98,40 @@ function makeCorruptPng(w = 8, h = 8) {
         pngChunk('IEND', Buffer.alloc(0))]);
 }
 
+// Minimal animated GIF. Uses min-code-size 7 so every LZW code is exactly 8
+// bits (byte aligned), with a Clear code often enough that the code width never
+// grows — "uncompressed" LZW, so no compressor is needed. Gives the suite a
+// real multi-frame source without shipping a binary fixture.
+function makeAnimatedGif(w = 4, h = 4, frames = 3) {
+    const b = [];
+    const u16 = v => { b.push(v & 0xFF, (v >> 8) & 0xFF); };
+    b.push(...Buffer.from('GIF89a'));
+    u16(w); u16(h);
+    b.push(0xF0, 0, 0);
+    b.push(0, 0, 0, 255, 255, 255);
+
+    for (let f = 0; f < frames; f++) {
+        b.push(0x21, 0xF9, 0x04, 0x00); u16(4); b.push(0x00, 0x00);
+        b.push(0x2C); u16(0); u16(0); u16(w); u16(h); b.push(0x00);
+        b.push(0x07);
+
+        const codes = [0x80];
+        for (let i = 0; i < w * h; i++) {
+            codes.push((i + f) % 2);
+            if (codes.length % 100 === 0) codes.push(0x80);
+        }
+        codes.push(0x81);
+
+        for (let i = 0; i < codes.length; i += 255) {
+            const chunk = codes.slice(i, i + 255);
+            b.push(chunk.length, ...chunk);
+        }
+        b.push(0x00);
+    }
+    b.push(0x3B);
+    return Buffer.from(b);
+}
+
 async function loadWasm(jsPath) {
     const { default: factory } = await import(jsPath);
     const wasmBin = fs.readFileSync(jsPath.replace(/\.js$/, '.wasm'));
@@ -662,6 +696,52 @@ function testBoolFlags() {
     ok('-vf does not eat the output', p.outputs[0]?.url === 'out.mp4');
 }
 
+// ── 14. Multi-frame decode ───────────────────────────────────────────────────
+
+async function testMultiFrame() {
+    section('Multi-frame decode');
+
+    const { gpu }  = await import('../src/js/gpu.js');
+    const { exec } = await import('../src/js/exec.mjs');
+    await gpu.load();
+
+    const gif = new Uint8Array(makeAnimatedGif(4, 4, 3));
+
+    const d = gpu.createDecoder(gif, 'gif');
+    ok('animated gif reports 4x4', d.width === 4 && d.height === 4);
+    let n = 0;
+    while (d.nextFrame()) n++;
+    d.close();
+    ok('decodes all three frames', n === 3);
+
+    // -vframes caps the stream.
+    for (const [limit, expect] of [[1, 1], [2, 2], [9, 3]]) {
+        const dl = await exec(gif, ['-i', 'a.gif', '-vframes', String(limit)]);
+        let seen = 0;
+        while (dl.nextFrame()) seen++;
+        dl.close();
+        ok(`-vframes ${limit} yields ${expect} frames`, seen === expect);
+    }
+
+    // encode() must respect the same budget.
+    const wasmpegApi = (await import('../src/js/wasmpeg.mjs')).default;
+    await wasmpegApi.load();
+    const realCreate = gpu.createDecoder;
+    let decodes = 0;
+    gpu.createDecoder = (...args) => {
+        const dd = realCreate.apply(gpu, args);
+        const realNext = dd.nextFrame.bind(dd);
+        dd.nextFrame = (...a) => { decodes++; return realNext(...a); };
+        return dd;
+    };
+    try {
+        await wasmpegApi.encode(gif, { codec: 'mjpeg', frames: 2, format: 'gif' });
+        ok('encode({frames:2}) decodes exactly two frames', decodes === 2);
+    } finally {
+        gpu.createDecoder = realCreate;
+    }
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -681,6 +761,7 @@ await testEncodeBudget();
 await testSingleInstance();
 await testFiltergraphDimensions();
 testBoolFlags();
+await testMultiFrame();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
