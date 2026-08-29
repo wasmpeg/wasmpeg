@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- `tests/fate.mjs` was comparing raw decoder output against FATE references
+  that the ffmpeg CLI generated with an auto-inserted format/rate-normalizing
+  conversion (`-fps_mode`/`-sws_flags`, present when a stream changes pixel
+  format mid-decode) or demuxer-specific sizing options
+  (`-pixel_format`/`-video_size`/`-stride`, for forcing the rawvideo demuxer)
+  that `decoder_open_format` has no way to pass. 11 tests were being held to a
+  standard nothing in our pipeline claims to meet. Correctness moves from
+  92.0% (392/426) to 93.3% (387/415) — a smaller, more honest denominator, not
+  a decoder fix. See `TODO.local.md` for the investigation.
+
 ### Added
 - A persistent GPU session (`gpu_session_open`/`run`/`close`, `gpu.createGpuSession()`)
   so the WebGPU device is created once instead of on every `pipeline_run_rgba_gpu`
