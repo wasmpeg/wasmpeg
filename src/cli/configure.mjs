@@ -281,6 +281,35 @@ const PRESETS = {
                     'transpose', 'rotate', 'pad', 'trim', 'setpts', 'fps', 'split', 'colorspace'],
         desc: 'Standard dev build — broad decode, common filters',
     },
+
+    // Royalty-free only: nothing here is encumbered by the MPEG-LA/Access
+    // Advance patent pools, so this build can ship where H.264/HEVC/AAC and the
+    // MPEG-family codecs are a licensing problem. Deliberately excludes h264,
+    // hevc, aac, mpeg1/2/4, h263, vc1, wmv, dts and ac3.
+    free: {
+        gpl: false,
+        decoders:  ['vp8', 'vp9', 'av1', 'theora', 'vp3', 'vp6', 'vp6a', 'vp6f',
+                    'opus', 'vorbis', 'flac', 'speex',
+                    'pcm_s16le', 'pcm_s16be', 'pcm_u8', 'pcm_s24le', 'pcm_s32le',
+                    'pcm_f32le', 'pcm_f64le', 'pcm_mulaw', 'pcm_alaw',
+                    'png', 'apng', 'gif', 'bmp', 'tiff', 'webp', 'targa', 'dpx',
+                    'ffv1', 'huffyuv', 'ffvhuff', 'utvideo', 'magicyuv', 'qoa'],
+        encoders:  ['vorbis', 'opus', 'flac', 'png', 'gif', 'bmp', 'tiff',
+                    'ffv1', 'huffyuv',
+                    'pcm_s16le', 'pcm_f32le'],
+        demuxers:  ['matroska', 'ogg', 'wav', 'flac', 'ivf', 'av1', 'rawvideo',
+                    'apng', 'qoa', 'image2', 'image2pipe',
+                    'image_png_pipe', 'image_bmp_pipe', 'image_gif_pipe',
+                    'image_tiff_pipe', 'image_webp_pipe'],
+        muxers:    ['webm', 'ogg', 'matroska', 'wav', 'flac', 'image2',
+                    'image2pipe', 'apng', 'gif', 'webp', 'null'],
+        parsers:   ['vp8', 'vp9', 'av1', 'opus', 'flac', 'vp3', 'png', 'gif', 'bmp'],
+        protocols: ['file'],
+        filters:   ['scale', 'crop', 'overlay', 'aresample', 'hflip', 'vflip',
+                    'hstack', 'vstack', 'format', 'transpose', 'pad', 'trim',
+                    'setpts', 'fps', 'split', 'null', 'anull'],
+        desc: 'Royalty-free codecs only — VP8/VP9/AV1/Theora, Opus/Vorbis/FLAC, lossless + images',
+    },
 };
 
 // GPL preset inherits everything from lgpl and extends it
