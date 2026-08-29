@@ -1106,6 +1106,63 @@ async function testGpuSession() {
     gpu.releaseCachedSession();
 }
 
+// ── 24. Audio encode ─────────────────────────────────────────────────────────
+
+async function testAudioEncode() {
+    section('Audio encode');
+
+    const { gpu } = await import('../src/js/gpu.js');
+    const wasmpegApi = (await import('../src/js/wasmpeg.mjs')).default;
+    await wasmpegApi.load();
+
+    const src = new Uint8Array(makeWav(8000, 2, 8000));
+
+    // Container magic proves the muxer ran, not just the encoder.
+    const cases = [
+        ['wav',  'pcm_s16le', [0x52, 0x49, 0x46, 0x46]],   // RIFF
+        ['flac', 'flac',      [0x66, 0x4C, 0x61, 0x43]],   // fLaC
+        ['ogg',  'opus',      [0x4F, 0x67, 0x67, 0x53]],   // OggS
+    ];
+    for (const [fmt, codec, magic] of cases) {
+        const out = await wasmpegApi.encodeAudio(src, { fmt, codec });
+        ok(`${fmt}/${codec} produces output`, out.length > 0);
+        ok(`${fmt}/${codec} has the right container magic`,
+            magic.every((b, i) => out[i] === b));
+    }
+
+    // PCM is lossless and uncompressed: 8000 frames x 2ch x 2 bytes + header.
+    const pcm = await wasmpegApi.encodeAudio(src, { fmt: 'wav', codec: 'pcm_s16le' });
+    ok('pcm output is the exact expected size', pcm.length === 8000 * 2 * 2 + 78);
+
+    // FLAC must actually compress a pure tone.
+    const flac = await wasmpegApi.encodeAudio(src, { fmt: 'flac', codec: 'flac' });
+    ok('flac is smaller than pcm', flac.length < pcm.length);
+
+    // Round trip: what we encoded must decode back at the same rate and layout.
+    const back = await wasmpegApi.decodeAudio(pcm, { format: 'wav' });
+    ok('round trip keeps the sample rate', back.sampleRate === 8000);
+    ok('round trip keeps the channel count', back.channels === 2);
+    let total = 0, chunk;
+    while ((chunk = back.nextSamples())) total += chunk.length;
+    back.close();
+    ok('round trip keeps every sample', total === 8000 * 2);
+
+    // Error paths must not strand a session.
+    let e1 = null, e2 = null;
+    try { gpu.createAudioEncoder({ fmt: 'wav', codec: 'nope', sampleRate: 8000, channels: 1 }); }
+    catch (e) { e1 = e; }
+    ok('unknown audio encoder throws', e1 !== null);
+    try { gpu.createAudioEncoder({ fmt: 'wav', codec: 'pcm_s16le' }); } catch (e) { e2 = e; }
+    ok('missing sampleRate/channels throws', e2 !== null);
+
+    // A video encoder must refuse PCM.
+    const venc = gpu.createEncoder({ fmt: 'image2pipe', codec: 'mjpeg', width: 8, height: 8 });
+    let e3 = null;
+    try { venc.pushPcm?.(new Float32Array(8)); } catch (e) { e3 = e; }
+    ok('video encoder exposes no pcm path', typeof venc.pushPcm !== 'function' || e3 !== null);
+    venc.close();
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -1136,6 +1193,7 @@ await testPresets();
 testExportCoverage();
 await testSeek();
 await testGpuSession();
+await testAudioEncode();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);

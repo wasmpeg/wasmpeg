@@ -170,7 +170,7 @@ per-codec breakdown lives in [COMPAT.md](COMPAT.md). The main formats:
 | **Audio decode** | AAC, Opus, MP3, Vorbis, FLAC, AC-3, E-AC-3, DTS, TrueHD, ALAC, WMA, WavPack, and more |
 | **Image** | PNG, JPEG, JPEG-2000, WebP, TIFF, BMP, GIF, EXR, PSD, DPX, TGA |
 | **Video encode** | MJPEG, PNG, GIF, BMP, TIFF, HuffYUV, FFV1 — plus **H.264/H.265** in `wasmpeg-full` |
-| **Audio encode** | AAC, Opus, FLAC, MP2, WavPack, PCM variants — compiled in, but the encode API is video-only today |
+| **Audio encode** | AAC, Opus, FLAC, MP2, WavPack, PCM variants |
 | **Containers** | MP4, MKV, WebM, AVI, OGG, MPEG-TS, FLV, ASF, WAV, FLAC, and more |
 
 ### How we measure it
