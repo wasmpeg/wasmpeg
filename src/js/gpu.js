@@ -36,6 +36,15 @@
 
 let _mod    = null;
 let _hasGPU = false;
+const _logHandlers = new Set();
+
+/** Subscribe to the module's stdout/stderr. Handlers get ({ type, message }). */
+function onLog(fn)  { _logHandlers.add(fn);    return () => _logHandlers.delete(fn); }
+function offLog(fn) { _logHandlers.delete(fn); }
+
+function emitLog(type, message) {
+    for (const h of _logHandlers) h({ type, message });
+}
 
 async function instantiate(path) {
     const isNode = typeof process !== 'undefined' && process.versions?.node;
@@ -45,7 +54,11 @@ async function instantiate(path) {
         nodeOpts = { wasmBinary: fsMod.readFileSync(new URL(path).pathname.replace(/\.js$/, '.wasm')) };
     }
     const { default: factory } = await import(/* @vite-ignore */ path);
-    return factory(nodeOpts);
+    return factory({
+        print:    msg => emitLog('stdout', msg),
+        printErr: msg => emitLog('stderr', msg),
+        ...nodeOpts,
+    });
 }
 
 async function load({ wasmPath } = {}) {
@@ -312,7 +325,7 @@ function benchCpu(srcW, srcH, dstW, dstH, iters) {
 }
 
 export const gpu = {
-    load, scale,
+    load, scale, onLog, offLog,
     createDecoder, createDecoderFile,
     createAudioDecoder, probe, createEncoder,
     hasWebGPU, benchGpu, benchCpu,
