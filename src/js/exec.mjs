@@ -326,11 +326,13 @@ export async function exec(input, args) {
     const af = outOpts['-af'] ?? outOpts['-filter:a'];
     if (af || ('-vn' in outOpts && !filtergraph)) {
         const norm = await normalizeInput(input);
-        if (norm.rgba)   throw new Error('audio output requires a media file input, not raw pixels');
-        if (norm.fspath) throw new Error('audio output from WASM FS path is not yet supported');
+        if (norm.rgba) throw new Error('audio output requires a media file input, not raw pixels');
         // Same hinting the high-level decodeAudio() applies: several game and
         // legacy audio containers carry no magic bytes and only probe by name.
-        return gpu.createAudioDecoder(norm.bytes, formatHint(norm.name));
+        // No audio_open_file export exists, so an FS path is read out and sent
+        // through the byte path, matching wasmpeg.decodeAudio().
+        const bytes = norm.fspath ? gpu.FS.readFile(norm.fspath) : norm.bytes;
+        return gpu.createAudioDecoder(bytes, formatHint(norm.name));
     }
 
     const norm = await normalizeInput(input);
