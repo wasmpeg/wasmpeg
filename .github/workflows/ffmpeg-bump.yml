@@ -1,0 +1,74 @@
+name: ffmpeg-bump
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      needed: ${{ steps.check.outputs.needed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: check
+        run: |
+          current=$(cat vendor/ffmpeg/RELEASE)
+          latest=$(curl -s "https://api.github.com/repos/FFmpeg/FFmpeg/tags?per_page=30" \
+            | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+                const t=JSON.parse(d).map(x=>x.name).filter(n=>/^n\d+\.\d+(\.\d+)?\$/.test(n));
+                const parts=n=>n.slice(1).split('.').map(Number);
+                t.sort((a,b)=>{const x=parts(a),y=parts(b);for(let i=0;i<3;i++){const d=(y[i]||0)-(x[i]||0);if(d)return d;}return 0;});
+                console.log(t[0].replace(/^n/,''));
+              })")
+          echo "current=$current  latest=$latest"
+          if [ "$current" = "$latest" ]; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "tag=n$latest" >> "$GITHUB_OUTPUT"
+          fi
+
+  bump:
+    needs: check
+    if: needs.check.outputs.needed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - run: |
+          git config user.name "wasmpeg-bot"
+          git config user.email "bot@wasmpeg.dev"
+
+      - name: bump vendor/ffmpeg
+        run: bash scripts/bump-ffmpeg.sh ${{ needs.check.outputs.tag }}
+
+      - name: check for unresolved subtree conflicts
+        run: |
+          if [ -n "$(git ls-files -u)" ]; then
+            echo "::error::subtree pull left conflicts in the glue lines — needs a human, see scripts/bump-ffmpeg.sh"
+            exit 1
+          fi
+
+      - run: git commit --amend -s --no-edit
+
+      - name: open pr
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: ffmpeg-bump/${{ needs.check.outputs.tag }}
+          title: "ffmpeg: bump to ${{ needs.check.outputs.tag }}"
+          body: |
+            Automated bump of `vendor/ffmpeg/` to `${{ needs.check.outputs.tag }}`.
+
+            Apply the `ok-to-test` label to run the build and test suite against it.
+          labels: ffmpeg-bump
+          commit-message: "ffmpeg: bump to ${{ needs.check.outputs.tag }}"
