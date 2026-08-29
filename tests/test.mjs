@@ -132,6 +132,23 @@ function makeAnimatedGif(w = 4, h = 4, frames = 3) {
     return Buffer.from(b);
 }
 
+// Uncompressed PCM WAV, so the suite has an audio source it can build itself.
+function makeWav(sampleRate = 8000, channels = 1, frames = 800) {
+    const bytes = frames * channels * 2;
+    const b = Buffer.alloc(44 + bytes);
+    b.write('RIFF', 0); b.writeUInt32LE(36 + bytes, 4); b.write('WAVE', 8);
+    b.write('fmt ', 12); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20);
+    b.writeUInt16LE(channels, 22); b.writeUInt32LE(sampleRate, 24);
+    b.writeUInt32LE(sampleRate * channels * 2, 28);
+    b.writeUInt16LE(channels * 2, 32); b.writeUInt16LE(16, 34);
+    b.write('data', 36); b.writeUInt32LE(bytes, 40);
+    for (let i = 0; i < frames; i++)
+        for (let c = 0; c < channels; c++)
+            b.writeInt16LE(Math.round(16000 * Math.sin(2 * Math.PI * 440 * i / sampleRate)),
+                44 + (i * channels + c) * 2);
+    return b;
+}
+
 async function loadWasm(jsPath) {
     const { default: factory } = await import(jsPath);
     const wasmBin = fs.readFileSync(jsPath.replace(/\.js$/, '.wasm'));
@@ -742,6 +759,118 @@ async function testMultiFrame() {
     }
 }
 
+// ── 15. Format hints ─────────────────────────────────────────────────────────
+
+async function testFormatHints() {
+    section('Format hints');
+
+    const { formatHint, EXT_FMT } = await import('../src/js/formats.js');
+
+    ok('maps a bare extension',        formatHint('clip.vag') === 'kvag');
+    ok('maps through a path',          formatHint('/samples/a/b/x.tco') === 'g723_1');
+    ok('maps through a url',           formatHint('https://h/x.shn?v=1#f') === undefined || formatHint('https://h/x.shn') === 'shorten');
+    ok('is case insensitive',          formatHint('CLIP.VAG') === 'kvag');
+    ok('falls back to a path rule',    formatHint('/fate/dolby_e/16-11') === 's337m');
+    ok('returns undefined when unknown', formatHint('movie.mp4') === undefined);
+    ok('handles empty input',          formatHint('') === undefined && formatHint(null) === undefined);
+    ok('every mapping is a string',    Object.values(EXT_FMT).every(v => typeof v === 'string'));
+}
+
+// ── 16. Arg parser structure ─────────────────────────────────────────────────
+
+function testArgStructure() {
+    section('Arg parser structure');
+
+    const p = parseArgs(['-hide_banner', '-i', 'in.mp4', '-vf', 'scale=2:2', '-y', 'out.png']);
+    ok('input url captured',        p.inputs[0]?.url === 'in.mp4');
+    ok('output url captured',       p.outputs[0]?.url === 'out.png');
+    ok('output option captured',    p.outputs[0]?.options['-vf'] === 'scale=2:2');
+    ok('pre-input option is global', p.global['-hide_banner'] === true);
+
+    // Options before -i belong to the input, not the output.
+    const q = parseArgs(['-f', 'gif', '-i', 'in.gif', 'out.png']);
+    ok('pre-input -f attaches to the input', q.inputs[0]?.options['-f'] === 'gif');
+    ok('output keeps its own options',       Object.keys(q.outputs[0]?.options ?? {}).length === 0);
+
+    // With no output token the trailing options land in global.
+    const r = parseArgs(['-i', 'in.mp4', '-vf', 'hflip']);
+    ok('trailing options fall to global', r.global['-vf'] === 'hflip');
+    ok('no outputs parsed',               r.outputs.length === 0);
+
+    // A string command tokenizes the same way, quotes included.
+    const t = parseArgs('-i in.mp4 -vf "scale=2:2,hflip" out.png');
+    ok('string form parses the filtergraph', t.outputs[0]?.options['-vf'] === 'scale=2:2,hflip');
+}
+
+// ── 17. Audio, probe and encoder edges ───────────────────────────────────────
+
+async function testAudioProbeEncoder() {
+    section('Audio, probe and encoder edges');
+
+    const { gpu } = await import('../src/js/gpu.js');
+    await gpu.load();
+
+    const wav = new Uint8Array(makeWav(8000, 2, 800));
+
+    const a = gpu.createAudioDecoder(wav, 'wav');
+    ok('audio reports two channels', a.channels === 2);
+    ok('audio reports 8 kHz',        a.sampleRate === 8000);
+    let total = 0, min = 1, max = -1, chunk;
+    while ((chunk = a.nextSamples())) {
+        total += chunk.length;
+        for (const v of chunk) { if (v < min) min = v; if (v > max) max = v; }
+    }
+    a.close();
+    ok('decodes every interleaved sample', total === 800 * 2);
+    ok('samples stay inside [-1, 1]',      min >= -1 && max <= 1);
+    ok('samples are not silence',          max > 0.1 && min < -0.1);
+
+    const info = gpu.probe(wav);
+    ok('probe names the container',   info.format.includes('wav'));
+    ok('probe counts one stream',     info.streams.length === 1);
+    ok('probe types the stream',      info.streams[0].type === 'audio');
+    ok('probe reports audio params',  info.audio.sampleRate === 8000 && info.audio.channels === 2);
+    ok('probe duration is a number or null',
+        info.duration === null || typeof info.duration === 'number');
+
+    // An unknown encoder must fail cleanly rather than allocate a session.
+    let encErr = null;
+    try { gpu.createEncoder({ fmt: 'image2pipe', codec: 'definitely-not-a-codec' }); }
+    catch (e) { encErr = e; }
+    ok('unknown encoder name throws', encErr !== null);
+
+    let missingErr = null;
+    try { gpu.createEncoder({ codec: 'mjpeg' }); } catch (e) { missingErr = e; }
+    ok('missing fmt throws', missingErr !== null);
+}
+
+// ── 18. Session pool bounds ──────────────────────────────────────────────────
+
+async function testSessionPoolBounds() {
+    section('Session pool bounds');
+
+    const { gpu } = await import('../src/js/gpu.js');
+    await gpu.load();
+
+    const gif  = new Uint8Array(makeAnimatedGif(4, 4, 2));
+    const open = [];
+    let ninthFailed = false;
+    try {
+        for (let i = 0; i < 8; i++) open.push(gpu.createDecoder(gif, 'gif'));
+        ok('eight concurrent decoders open', open.length === 8);
+        try { open.push(gpu.createDecoder(gif, 'gif')); }
+        catch { ninthFailed = true; }
+        ok('the ninth is refused', ninthFailed);
+    } finally {
+        for (const d of open) d.close();
+    }
+
+    // After closing, the pool is usable again.
+    const again = gpu.createDecoder(gif, 'gif');
+    ok('pool recovers after close', again.width === 4);
+    again.close();
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -762,6 +891,10 @@ await testSingleInstance();
 await testFiltergraphDimensions();
 testBoolFlags();
 await testMultiFrame();
+await testFormatHints();
+testArgStructure();
+await testAudioProbeEncoder();
+await testSessionPoolBounds();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
