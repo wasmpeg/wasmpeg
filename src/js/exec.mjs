@@ -47,6 +47,11 @@ const BOOL_FLAGS = new Set([
     '-accurate_seek', '-shortest',
     '-re', '-copyts', '-start_at_zero',
     '-auto_conversion_filters',
+    // Without these the unknown-flag heuristic below eats the next token, which
+    // is usually the output filename.
+    '-nostats', '-stats', '-dn', '-ignore_unknown', '-bitexact',
+    '-autorotate', '-noautorotate', '-xerror', '-fix_sub_duration',
+    '-vstats', '-noautoscale',
 ]);
 
 // ── tokenizer ─────────────────────────────────────────────────────────────────
