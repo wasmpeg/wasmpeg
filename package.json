@@ -6,7 +6,8 @@
   "type": "module",
   "main": "src/js/index.js",
   "exports": {
-    ".": "./src/js/index.js"
+    ".": "./src/js/index.js",
+    "./package.json": "./package.json"
   },
   "files": [
     "src/js/",
