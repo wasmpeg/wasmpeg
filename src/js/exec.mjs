@@ -7,7 +7,7 @@
  */
 
 import { gpu } from './gpu.js';
-import { formatHint } from './formats.js';
+import { formatHint, outputTarget } from './formats.js';
 
 // ── flags ─────────────────────────────────────────────────────────────────────
 
@@ -320,6 +320,76 @@ export async function exec(input, args) {
     if (!filtergraph && sizeStr) {
         const { w, h } = parseSize(sizeStr);
         filtergraph = `scale=${w}:${h}`;
+    }
+
+    // ── named output file → transcode and write it into the WASM FS ──────────
+    const outUrl = parsed.outputs[0]?.url;
+    if (outUrl) {
+        const target = outputTarget(outUrl);
+        if (!target) {
+            const ext = outUrl.split('.').pop();
+            throw new Error(
+                `no encoder for .${ext} in this build — supported outputs: ` +
+                'gif, png, jpg, bmp, tif, tga, dpx, avi, mkv, wav, flac, ogg');
+        }
+
+        const norm = await normalizeInput(input);
+        const bytes = norm.fspath ? gpu.FS.readFile(norm.fspath) : norm.bytes;
+
+        let out;
+        if (target.audio) {
+            const dec = gpu.createAudioDecoder(bytes, formatHint(norm.name));
+            const enc = gpu.createAudioEncoder({
+                fmt: target.fmt, codec: target.codec,
+                sampleRate: dec.sampleRate, channels: dec.channels,
+            });
+            try {
+                let chunk;
+                while ((chunk = dec.nextSamples())) enc.pushPcm(chunk);
+                out = enc.finish();
+            } finally { enc.close(); dec.close(); }
+        } else {
+            const dec = norm.fspath
+                ? gpu.createDecoderFile(norm.fspath)
+                : gpu.createDecoder(bytes, formatHint(norm.name));
+
+            // An explicit -vf/-s decides the output geometry; otherwise keep
+            // the source size.
+            let dstW = dec.width, dstH = dec.height;
+            if (filtergraph) {
+                const dims = fgDimensions(filtergraph, dec.width, dec.height);
+                if (dims) { dstW = dims.w; dstH = dims.h; }
+            }
+
+            const fpsNum = outOpts['-r'] ? Math.round(Number(outOpts['-r'])) : 0;
+            const enc = gpu.createEncoder({
+                fmt: target.fmt, codec: target.codec,
+                width: dstW, height: dstH,
+                fps: fpsNum > 0 ? fpsNum : (dec.fps > 0 ? Math.round(dec.fps) : 25),
+            });
+
+            const key   = Object.keys(outOpts).find(k => k === '-vframes' || k.startsWith('-frames'));
+            const limit = key ? parseInt(outOpts[key], 10) : Infinity;
+
+            try {
+                let ptsMs = 0, count = 0;
+                const step = 1000 / (dec.fps > 0 ? dec.fps : 25);
+                for (;;) {
+                    if (count >= limit) break;
+                    const frame = dec.nextFrame(dstW, dstH);
+                    if (!frame) break;
+                    enc.pushRgba(frame, dstW, dstH, Math.round(ptsMs));
+                    ptsMs += step;
+                    count++;
+                }
+                out = enc.finish();
+            } finally { enc.close(); dec.close(); }
+        }
+
+        // Make it readable through FFmpeg.readFile()/gpu.FS, which is what
+        // callers coming from ffmpeg.wasm expect after naming an output.
+        try { gpu.FS.writeFile(outUrl, out); } catch { /* path may not be writable */ }
+        return out;
     }
 
     // ── audio filter / audio-only → route to audio decoder ───────────────────
