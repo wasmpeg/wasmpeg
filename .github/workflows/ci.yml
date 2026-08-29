@@ -6,6 +6,7 @@ on:
 
 jobs:
   dco:
+    if: "!contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +28,7 @@ jobs:
           exit $missing
 
   quality:
+    if: "!contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,10 +48,17 @@ jobs:
       - name: fate arg-parser check
         run: node tests/fate-runner.mjs
 
-  # gated: needs the ok-to-test label, which needs triage/write access to apply
+  # human PRs: gated behind the ok-to-test label (needs triage/write access).
+  # ffmpeg-bump PRs: bot-authored, known deterministic content, no fork-PR
+  # trust question — runs on its own, not behind dco/quality since those
+  # don't run for it either. always() so a skipped dco/quality doesn't also
+  # skip this (GitHub skips a job by default if anything in `needs` skipped).
   build:
     needs: [dco, quality]
-    if: contains(github.event.pull_request.labels.*.name, 'ok-to-test')
+    if: |
+      always() &&
+      (contains(github.event.pull_request.labels.*.name, 'ok-to-test') ||
+       contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,15 +80,20 @@ jobs:
       - name: verify
         run: make verify
 
-  # FATE (compat.mjs/fate.mjs, ~1.3GB fate-suite) waits on a self-hosted
-  # runner with fate-suite already rsynced — not wired up yet:
-  #
-  #   fate:
-  #     needs: [build]
-  #     if: contains(github.event.pull_request.labels.*.name, 'ok-to-test')
-  #     runs-on: [self-hosted, fate]
-  #     steps:
-  #       - uses: actions/checkout@v4
-  #       - run: rsync -a rsync://fate-suite.ffmpeg.org/fate-suite/ fate-suite/
-  #       - run: PRESET=gpl TARGET=cpu bash scripts/build.sh
-  #       - run: node tests/compat.mjs && node tests/fate.mjs --workers=2
+  # needs a self-hosted runner labeled "fate" with fate-suite already rsynced
+  # (rsync://fate-suite.ffmpeg.org/fate-suite/) — queues until one exists.
+  fate:
+    needs: [build]
+    if: |
+      always() && needs.build.result == 'success' &&
+      (contains(github.event.pull_request.labels.*.name, 'ok-to-test') ||
+       contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump'))
+    runs-on: [self-hosted, fate]
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: rsync -a rsync://fate-suite.ffmpeg.org/fate-suite/ fate-suite/
+
+      - run: PRESET=gpl TARGET=cpu bash scripts/build.sh
+
+      - run: node tests/compat.mjs && node tests/fate.mjs --workers=2
