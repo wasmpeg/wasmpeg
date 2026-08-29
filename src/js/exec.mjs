@@ -253,6 +253,18 @@ function fgDimensions(fg, srcW = 0, srcH = 0) {
     return { w: Math.round(w), h: Math.round(h) };
 }
 
+// Wrap a decoder so it reports end of stream after n frames (-vframes/-frames).
+function limitFrames(dec, n) {
+    let seen = 0;
+    return {
+        width:  dec.width,
+        height: dec.height,
+        fps:    dec.fps,
+        nextFrame(...args) { return seen++ < n ? dec.nextFrame(...args) : null; },
+        close() { dec.close(); },
+    };
+}
+
 // ── dispatch ─────────────────────────────────────────────────────────────────
 
 /**
@@ -339,7 +351,12 @@ export async function exec(input, args) {
     }
 
     // ── decode-only — return decoder ─────────────────────────────────────────
-    if (dec) return dec;
+    if (dec) {
+        // -vframes N / -frames:v N cap the stream length.
+        const key   = Object.keys(outOpts).find(k => k === '-vframes' || k.startsWith('-frames'));
+        const limit = key ? parseInt(outOpts[key], 10) : NaN;
+        return Number.isInteger(limit) && limit > 0 ? limitFrames(dec, limit) : dec;
+    }
 
     throw new Error(`exec: could not determine operation from args: ${JSON.stringify(parsed)}`);
 }
