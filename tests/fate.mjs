@@ -14,6 +14,7 @@
  *
  * Usage:
  *   node tests/fate.mjs [--filter=h264] [--no-save] [--workers=N]
+ *   node tests/fate.mjs --filter=hevc --verbose   # per-test failure detail
  *   FATE_SAMPLES=/path/to/fate-suite node tests/fate.mjs
  */
 
@@ -46,7 +47,7 @@ function adler32(buf) {
 // ── worker: decode a chunk of tests and check checksums ───────────────────────
 
 if (!isMainThread) {
-    const { tests } = workerData;
+    const { tests, verbose } = workerData;
 
     const { default: factory } = await import(wasmJs);
     const mod = await factory({ wasmBinary: fs.readFileSync(wasmBin) });
@@ -58,7 +59,7 @@ if (!isMainThread) {
         byCodec[t.codec] ??= { pass: 0, total: 0 };
         byCodec[t.codec].total++;
 
-        let ok = false;
+        let ok = false, detail = null;
         try {
             const bytes  = new Uint8Array(fs.readFileSync(t.localPath));
             const srcPtr = mod._malloc(bytes.byteLength);
@@ -66,13 +67,16 @@ if (!isMainThread) {
             const handle = cc('decoder_open', 'number', ['number','number'], [srcPtr, bytes.byteLength]);
             mod._free(srcPtr);
 
-            if (handle >= 0) {
+            if (handle < 0) {
+                if (verbose) detail = `decoder_open failed: ${handle}`;
+            } else {
                 const w   = cc('decoder_width',  'number', ['number'], [handle]);
                 const h   = cc('decoder_height', 'number', ['number'], [handle]);
                 const cap = Math.max(w * h * 8, 1 << 16);
                 const buf = mod._malloc(cap);
 
                 const got = [];
+                let stopErr = 0;
                 // Decode one past the reference count so over-production is caught.
                 // A negative return is treated the same as EOF: many FATE samples are
                 // truncated mid-frame, where native ffmpeg stops cleanly but our decoder
@@ -80,7 +84,7 @@ if (!isMainThread) {
                 // produce match the reference exactly, that's a correct decode.
                 for (let i = 0; i < t.crcs.length + 1; i++) {
                     const sz = cc('decoder_next_raw_frame', 'number', ['number','number','number'], [handle, buf, cap]);
-                    if (sz <= 0) break;
+                    if (sz <= 0) { if (sz < 0) stopErr = sz; break; }
                     got.push({ size: sz, crc: adler32(new Uint8Array(mod.HEAPU8.buffer, buf, sz)) });
                 }
                 mod._free(buf);
@@ -88,11 +92,24 @@ if (!isMainThread) {
 
                 ok = got.length === t.crcs.length &&
                      got.every((g, i) => g.crc === t.crcs[i].crc && g.size === t.crcs[i].size);
+
+                if (!ok && verbose) {
+                    if (got.length !== t.crcs.length) {
+                        detail = `frame count: got ${got.length}, expected ${t.crcs.length}` +
+                                 (stopErr ? ` (decoder_next_raw_frame returned ${stopErr})` : ' (clean eof)');
+                    } else {
+                        const i = got.findIndex((g, i) => g.crc !== t.crcs[i].crc || g.size !== t.crcs[i].size);
+                        const g = got[i], e = t.crcs[i];
+                        detail = `frame ${i}: size got=${g.size} exp=${e.size}, ` +
+                                 `crc got=0x${g.crc.toString(16)} exp=0x${e.crc.toString(16)}`;
+                    }
+                }
             }
-        } catch {}
+        } catch (e) { if (verbose) detail = `threw: ${e.message}`; }
 
         byCodec[t.codec].pass += ok ? 1 : 0;
-        parentPort.postMessage({ type: 'tick', ok });
+        parentPort.postMessage({ type: 'tick', ok, name: verbose ? t.name : undefined,
+                                 samplePath: verbose ? t.samplePath : undefined, detail });
     }
 
     parentPort.postMessage({ type: 'done', byCodec });
@@ -107,9 +124,19 @@ if (!fs.existsSync(wasmJs)) {
 }
 
 const NO_SAVE    = process.argv.includes('--no-save');
+const VERBOSE    = process.argv.includes('--verbose');
 const FILTER_ARG = process.argv.find(a => a.startsWith('--filter='))?.split('=')[1];
 const NWORKERS   = parseInt(process.argv.find(a => a.startsWith('--workers='))?.split('=')[1])
                 || os.availableParallelism?.() || os.cpus().length;
+
+// --verbose runs single-threaded and prints why each failure failed — frame
+// count mismatch, or the index and values of the first mismatching frame —
+// instead of just the pass/fail tally. Meant for diagnosing a codec bucket
+// (`--filter=hevc --verbose`), not for the tracked run.
+if (VERBOSE && isMainThread && !FILTER_ARG) {
+    console.error('--verbose needs --filter=<codec> — it is meant for one bucket at a time.');
+    process.exit(1);
+}
 
 // Flags that transform frames or limit output — a test carrying any of these is
 // not a pure decode, so its reference won't match raw decoded frames. Skip them.
@@ -213,7 +240,9 @@ if (tests.length === 0) {
     console.error('no pure-decode video framecrc tests with local samples found');
     process.exit(1);
 }
-const chunks = chunkArray(tests, NWORKERS);
+// --verbose is single-worker: per-test detail needs to print in test order,
+// and it is only ever used to look at one small bucket at a time.
+const chunks = chunkArray(tests, VERBOSE ? 1 : NWORKERS);
 
 console.log(`\nfate correctness — ${tests.length} pure-decode video tests · ${chunks.length} workers\n`);
 
@@ -223,12 +252,18 @@ const byCodec = {};
 await new Promise((resolve, reject) => {
     let finished = 0;
     for (const chunk of chunks) {
-        const w = new Worker(new URL(import.meta.url), { workerData: { tests: chunk } });
+        const w = new Worker(new URL(import.meta.url), { workerData: { tests: chunk, verbose: VERBOSE } });
         w.on('message', msg => {
             if (msg.type === 'tick') {
                 done++;
                 msg.ok ? totalPass++ : totalFail++;
-                process.stdout.write(`\r  ${done}/${tests.length}  (${((totalPass / done) * 100).toFixed(1)}% correct)`);
+                if (VERBOSE) {
+                    console.log(`${msg.ok ? 'PASS' : 'FAIL'}  ${msg.name}`);
+                    console.log(`      sample: ${msg.samplePath}`);
+                    if (msg.detail) console.log(`      ${msg.detail}`);
+                } else {
+                    process.stdout.write(`\r  ${done}/${tests.length}  (${((totalPass / done) * 100).toFixed(1)}% correct)`);
+                }
             } else if (msg.type === 'done') {
                 for (const [codec, { pass, total }] of Object.entries(msg.byCodec)) {
                     byCodec[codec] ??= { pass: 0, total: 0 };
