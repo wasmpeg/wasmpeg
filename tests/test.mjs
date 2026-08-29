@@ -1006,6 +1006,57 @@ function testExportCoverage() {
         !cpuLine.includes('_pipeline_run_rgba_gpu'));
 }
 
+// ── 22. Seek and time options ────────────────────────────────────────────────
+
+async function testSeek() {
+    section('Seek and time options');
+
+    const { gpu }  = await import('../src/js/gpu.js');
+    const { exec } = await import('../src/js/exec.mjs');
+    await gpu.load();
+
+    const gif = new Uint8Array(makeAnimatedGif(4, 4, 10));
+
+    const d = gpu.createDecoder(gif, 'gif');
+    let first = 0;
+    while (d.nextFrame()) first++;
+    ok('decodes ten frames', first === 10);
+
+    // Seeking back to the start must make the stream replayable.
+    d.seek(0);
+    let second = 0;
+    while (d.nextFrame()) second++;
+    ok('seek(0) rewinds the stream', second === first);
+
+    // A negative target clamps to the start rather than erroring, so callers
+    // can subtract an offset without guarding it.
+    d.seek(-5000);
+    let third = 0;
+    while (d.nextFrame()) third++;
+    ok('negative seek clamps to the start', third === first);
+    d.close();
+
+    // -t converts a duration into a frame budget using the stream rate.
+    const dt = await exec(gif, ['-i', 'a.gif', '-t', '0.2']);
+    let n = 0;
+    while (dt.nextFrame()) n++;
+    dt.close();
+    ok('-t 0.2 at 25fps yields 5 frames', n === 5);
+
+    // -ss is accepted in both input and output position.
+    for (const args of [['-ss', '0', '-i', 'a.gif'], ['-i', 'a.gif', '-ss', '0']]) {
+        const ds = await exec(gif, args);
+        let m = 0;
+        while (ds.nextFrame()) m++;
+        ds.close();
+        ok(`-ss accepted as ${args[0] === '-ss' ? 'input' : 'output'} option`, m === 10);
+    }
+
+    let badErr = null;
+    try { await exec(gif, ['-i', 'a.gif', '-ss', 'not-a-time']); } catch (e) { badErr = e; }
+    ok('unparseable -ss throws', badErr !== null && /-ss/.test(badErr.message));
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -1034,6 +1085,7 @@ await testHintRoutingParity();
 await testFsPathInputs();
 await testPresets();
 testExportCoverage();
+await testSeek();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
