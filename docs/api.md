@@ -52,16 +52,51 @@ Example filtergraph strings: `"scale=1280:720"`, `"scale,format=yuv420p"`, `"cro
 
 ### `pipeline_run_rgba_gpu`
 
-Same signature as `pipeline_run_rgba`. WebGPU build only — dispatches the scale through the WebGPU backend. Returns `-1` on the CPU build.
+Same signature as `pipeline_run_rgba`. WebGPU build only — dispatches the scale through the WebGPU backend. **Creates and destroys the WebGPU device on every call**, so its cost is dominated by device setup, not the filter itself. Returns `-1` on the CPU build.
 
-### `bench_scale_cpu` / `bench_scale_webgpu`
+For repeated calls at the same geometry, use a GPU session instead (below) — it pays for device creation once.
+
+### `bench_scale_cpu` / `bench_scale_webgpu` / `bench_scale_webgpu_session`
 
 ```c
-float bench_scale_cpu(int src_w, int src_h, int dst_w, int dst_h, int iters);
-float bench_scale_webgpu(int src_w, int src_h, int dst_w, int dst_h, int iters);
+double bench_scale_cpu(int src_w, int src_h, int dst_w, int dst_h, int iters);
+double bench_scale_webgpu(int src_w, int src_h, int dst_w, int dst_h, int iters);
+double bench_scale_webgpu_session(int src_w, int src_h, int dst_w, int dst_h, int iters);
 ```
 
-Run `iters` scale operations and return the average time in milliseconds per frame. `bench_scale_webgpu` returns `-1` on the CPU build.
+Run `iters` scale operations and return the average time in milliseconds per frame. `bench_scale_webgpu` goes through `pipeline_run_rgba_gpu` (device created per call); `bench_scale_webgpu_session` goes through a single `gpu_session_open`/`gpu_session_run` pair, so the gap between the two numbers is the per-call device-creation cost. Both return `-1` on the CPU build.
+
+### GPU session (persistent device)
+
+`pipeline_run_rgba_gpu` above creates a fresh WebGPU device, hardware frame pool, and filtergraph on every call — async adapter and device requests that dominate the cost of the filter work itself. A GPU session builds all three once and reuses them.
+
+#### `gpu_session_open`
+
+```c
+int gpu_session_open(int src_w, int src_h, int dst_w, int dst_h, const char *filtergraph);
+```
+
+Opens a reusable GPU filter session at a fixed source and destination size. WebGPU build only. Returns a handle (0–3) or negative `AVERROR`; returns `-1`-range errors on the CPU build the same way `pipeline_run_rgba_gpu` does.
+
+#### `gpu_session_run`
+
+```c
+int gpu_session_run(int handle, const uint8_t *src_rgba, uint8_t *dst_rgba);
+```
+
+Runs one frame through an open session. `src_rgba` is `src_w * src_h * 4` bytes, `dst_rgba` is `dst_w * dst_h * 4` bytes (the sizes passed to `gpu_session_open`). Returns `0` on success, negative `AVERROR` on failure.
+
+#### `gpu_session_close`
+
+```c
+void gpu_session_close(int handle);
+```
+
+Frees the session — device, frame pool, and filtergraph. Safe to call with an invalid handle.
+
+In JS, `gpu.createGpuSession({ srcW, srcH, dstW, dstH, filtergraph })` wraps all
+three calls as `{ run(rgba), close() }`. `gpu.scale()` uses this internally,
+caching one session and reusing it across calls with matching geometry.
 
 ---
 
@@ -374,6 +409,39 @@ void encoder_close(int handle);
 
 Frees the encoder session and its output buffer.
 
+#### `encoder_open_audio`
+
+```c
+int encoder_open_audio(
+    const char *fmt_name, const char *codec_name,
+    int sample_rate, int channels,
+    int bitrate
+);
+```
+
+Opens an audio encoder session, sharing the same 4-slot pool as `encoder_open`.
+`fmt_name` is the muxer (e.g. `"wav"`, `"flac"`, `"ogg"`), `codec_name` is the
+encoder (e.g. `"pcm_s16le"`, `"flac"`, `"opus"`). `bitrate` is in bits/s; `0`
+uses the codec default. Input is always 32-bit float, interleaved — the same
+layout `audio_next_samples` produces — and is resampled internally to whatever
+sample format the codec wants. Returns a handle or negative `AVERROR`.
+
+#### `encoder_push_pcm`
+
+```c
+int encoder_push_pcm(int handle, const float *pcm, int nb_floats);
+```
+
+Pushes interleaved float samples into an audio encoder session opened with
+`encoder_open_audio`. `nb_floats` is the total float count (samples ×
+channels), not the frame count. Buffers internally and encodes whenever a full
+codec frame has accumulated, so this can be called with any chunk size.
+Returns `0` on success, negative `AVERROR` on failure.
+
+`encoder_finish` flushes the remaining buffered samples (including a final
+short frame) before finalizing the container — call it exactly as you would
+for a video encoder.
+
 ---
 
 ## `gpu` namespace
@@ -617,9 +685,58 @@ Decodes `input` frame-by-frame, encodes each frame with the specified encoder, a
 
 `opts`: `fmt`, `codec`, `width`, `height`, `fps`, `bitrate`, `frames` (max frames to encode, default all), `format` (force input demuxer).
 
+### `wasmpeg.encodeAudio(input, opts)`
+
+```js
+const flac = await wasmpeg.encodeAudio(file, { fmt: 'flac', codec: 'flac' });
+```
+
+Decodes the audio of `input`, re-encodes it, and returns the container bytes.
+Sample rate and channel count are taken from the source; there is no resample
+option beyond what the target codec forces.
+
+`opts`: `fmt` (default `'wav'`), `codec` (default `'pcm_s16le'`), `bitrate` (bits/s, `0` = codec default), `format` (force input demuxer).
+
 ### `wasmpeg.run(input, args)`
 
 Low-level: passes `args` (FFmpeg-style flag array) directly to `exec()`. For advanced filtergraph use.
+
+### Transcoding through `exec()` / `FFmpeg.exec()`
+
+Naming an output file routes to an encoder instead of returning raw pixels or a
+decoder, and the result is written into the WASM FS at that path:
+
+```js
+await ff.writeFile('in.mp4', data);
+await ff.exec(['-i', 'in.mp4', 'out.gif']);
+const gif = await ff.readFile('out.gif');   // also returned directly by exec()
+```
+
+The output extension picks both muxer and codec from a fixed table in
+`src/js/formats.js` (`OUT_FMT`) — there is no `-c:v`/`-c:a` override yet, and an
+unlisted extension throws rather than silently failing:
+
+| Extension | Container | Codec |
+|-----------|-----------|-------|
+| `.gif` | gif | gif |
+| `.png` | image2pipe | png |
+| `.jpg`, `.jpeg` | image2pipe | mjpeg |
+| `.bmp` | image2pipe | bmp |
+| `.tif`, `.tiff` | image2pipe | tiff |
+| `.tga` | image2pipe | targa |
+| `.dpx` | image2pipe | dpx |
+| `.avi` | avi | ffv1 (lossless) |
+| `.mkv` | matroska | ffv1 (lossless) |
+| `.wav` | wav | pcm_s16le |
+| `.flac` | flac | flac |
+| `.ogg`, `.opus` | ogg | opus |
+
+There is no H.264/HEVC/VP8/VP9/AV1 encoder in the LGPL build, so `.mp4` and
+`.webm` are deliberately absent — naming one throws
+`no encoder for .mp4 in this build` rather than producing a container the
+decoder side can't fill. `-vf`/`-s` set the output geometry, `-vframes` caps
+frame count, and audio-typed extensions (`.wav`/`.flac`/`.ogg`/`.opus`) route
+through the audio decoder/encoder pair instead of the video path.
 
 ---
 
@@ -640,7 +757,7 @@ mod._free(ptr);
 |-------|------|---------|
 | `-1` | — | Invalid handle or NULL pointer |
 | `-2` | `AVERROR(ENOENT)` | Path not found in WASM FS |
-| `-12` | `AVERROR(ENOMEM)` | All 8 session slots in use |
+| `-12` | `AVERROR(ENOMEM)` | Session pool full — 8 decode/audio/probe slots, 4 encoder slots, 4 GPU session slots, each pool independent |
 | `-1094995529` | `AVERROR_INVALIDDATA` | Corrupt data or zlib missing |
 | `-1330794744` | `AVERROR_PROTOCOL_NOT_FOUND` | `file` protocol not compiled in |
 | `-1163346256` | `AVERROR_DECODER_NOT_FOUND` | Decoder not compiled in |

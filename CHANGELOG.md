@@ -7,6 +7,22 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- A persistent GPU session (`gpu_session_open`/`run`/`close`, `gpu.createGpuSession()`)
+  so the WebGPU device is created once instead of on every `pipeline_run_rgba_gpu`
+  call. `gpu.scale()` caches and reuses one session automatically. A new
+  `bench_scale_webgpu_session` / `gpu.benchGpuSession()` pair, shown next to the
+  existing per-call benchmark in `tests/bench.html`, isolates the per-call
+  device-creation cost from the filter cost.
+- An audio encoder in the C ABI (`encoder_open_audio` / `encoder_push_pcm`),
+  `gpu.createAudioEncoder()`, and `wasmpeg.encodeAudio()`. Verified against
+  `pcm_s16le`, `flac`, and `opus` (FFmpeg's native Opus/Vorbis encoders are
+  flagged experimental upstream; enabled explicitly rather than refused).
+- Transcoding: naming an output file in `exec()` / `FFmpeg.exec()` now runs a
+  decode → (re-)encode → mux path and writes the result into the WASM FS, so
+  `exec(['-i', 'in.mp4', 'out.gif']); readFile('out.gif')` works. Output
+  container/codec is chosen from the extension (`src/js/formats.js`); an
+  unsupported extension (anything needing H.264/HEVC/VP8/VP9/AV1, none of
+  which this build can encode) throws instead of failing silently.
 - The WebGPU target builds. `--enable-webgpu` is wired into the vendored FFmpeg
   `configure`, `hwcontext_webgpu.h` is installed, and the emcc link pulls in
   zlib and simd128. `dist/webgpu.wasm` is 9.34 MiB raw / 3.85 MiB gzipped,
