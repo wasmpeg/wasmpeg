@@ -1057,6 +1057,55 @@ async function testSeek() {
     ok('unparseable -ss throws', badErr !== null && /-ss/.test(badErr.message));
 }
 
+// ── 23. GPU session ──────────────────────────────────────────────────────────
+
+async function testGpuSession() {
+    section('GPU session');
+
+    const { gpu } = await import('../src/js/gpu.js');
+    await gpu.load();
+
+    ok('createGpuSession is exposed',    typeof gpu.createGpuSession === 'function');
+    ok('benchGpuSession is exposed',     typeof gpu.benchGpuSession === 'function');
+    ok('releaseCachedSession is exposed', typeof gpu.releaseCachedSession === 'function');
+
+    if (gpu.hasWebGPU()) {
+        // A real adapter: the session must survive repeated runs and produce
+        // output of the requested size every time.
+        const s = gpu.createGpuSession({ srcW: 16, srcH: 16, dstW: 8, dstH: 8 });
+        const src = new Uint8ClampedArray(16 * 16 * 4).fill(128);
+        let sizes = new Set();
+        for (let i = 0; i < 20; i++) sizes.add(s.run(src).length);
+        ok('20 runs return one consistent size', sizes.size === 1 && sizes.has(8 * 8 * 4));
+        s.close();
+        let afterClose = null;
+        try { s.run(src); } catch (e) { afterClose = e; }
+        ok('run after close throws', afterClose !== null);
+    } else {
+        // No adapter (Node): the session API must refuse cleanly, and the
+        // benchmark must report -1 rather than pretending to measure.
+        let err = null;
+        try { gpu.createGpuSession({ srcW: 8, srcH: 8, dstW: 4, dstH: 4 }); }
+        catch (e) { err = e; }
+        ok('createGpuSession refuses without a WebGPU build', err !== null);
+        ok('benchGpuSession reports -1 on the cpu build',
+            gpu.benchGpuSession(8, 8, 4, 4, 1) === -1);
+        skip('gpu session run', 'no WebGPU adapter in Node');
+    }
+
+    // Whichever build is loaded, scale() must keep working and stay correct
+    // across repeated calls — this is the path the session cache sits on.
+    const src = new Uint8ClampedArray(8 * 8 * 4).fill(200);
+    const lens = new Set();
+    for (let i = 0; i < 5; i++) lens.add(gpu.scale(src, 8, 8, 4, 4).length);
+    ok('repeated scale() calls stay consistent', lens.size === 1 && lens.has(4 * 4 * 4));
+
+    // Changing geometry must not reuse a stale session.
+    const other = gpu.scale(src, 8, 8, 2, 2);
+    ok('scale() honours a geometry change', other.length === 2 * 2 * 4);
+    gpu.releaseCachedSession();
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -1086,6 +1135,7 @@ await testFsPathInputs();
 await testPresets();
 testExportCoverage();
 await testSeek();
+await testGpuSession();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
