@@ -486,6 +486,8 @@ async function testExportSurface() {
     section('Public export surface');
 
     const mod = await import('../src/js/index.js');
+    const { gpu: gpuNs } = mod;
+    await gpuNs.load();
 
     ok('default export is the high-level API',
         typeof mod.default === 'object' && mod.default !== null);
@@ -496,6 +498,15 @@ async function testExportSurface() {
     ok('gpu export is an object',              typeof mod.gpu === 'object' && mod.gpu !== null);
     ok('exec export is callable',              typeof mod.exec === 'function');
     ok('named wasmpeg export is the default',  mod.wasmpeg === mod.default);
+
+    // The WebGPU artifact is optional. Node has no navigator.gpu, so the
+    // loaders must already be sitting on the CPU build here — the same path a
+    // WebGPU browser takes when dist/webgpu.js was never shipped.
+    ok('gpu namespace loaded without a webgpu artifact', gpuNs.hasWebGPU() === false);
+    const ff = new mod.FFmpeg();
+    await ff.load();
+    ok('FFmpeg.load() succeeds with no webgpu artifact', ff.loaded === true);
+    ff.terminate();
 }
 
 // ── run ──────────────────────────────────────────────────────────────────────
