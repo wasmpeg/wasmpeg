@@ -11,15 +11,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      # The wasm artifacts are not committed, so CI builds them before testing.
+      # setup-emsdk must run before setup-node: it prepends its own directory
+      # to PATH, and that directory contains a subdirectory literally named
+      # "node" (its bundled toolchain, emsdk-main/node/<version>/bin/node).
+      # If it runs second, that shadows setup-node's real node install —
+      # bash resolves bare `node` to the directory (every dir passes the
+      # executable-bit test) and exec() on it fails with "Permission denied".
+      # Caught by a local `act` run against a cold checkout, not by anything
+      # working on a machine that already had these tools installed.
       - uses: mymindstorm/setup-emsdk@v14
         with:
           version: 3.1.64
           actions-cache-folder: emsdk-cache
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: build cpu target
         run: PRESET=lgpl TARGET=cpu bash scripts/build.sh
