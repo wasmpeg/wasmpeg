@@ -7,10 +7,15 @@ All exported functions are decorated with `EMSCRIPTEN_KEEPALIVE` and listed in `
 ### `pipeline_version`
 
 ```c
-int pipeline_version(void);
+const char *pipeline_version(void);
 ```
 
-Returns the pipeline ABI version (currently `1`).
+Returns the FFmpeg version string the module was built against (`av_version_info()`),
+for example `"8.0"`. In JS, read it with `ccall(..., 'string', ...)`:
+
+```js
+const version = mod.ccall('pipeline_version', 'string', [], []);
+```
 
 ### `pipeline_run_rgba`
 
