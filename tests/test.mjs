@@ -905,6 +905,34 @@ async function testHintRoutingParity() {
     }
 }
 
+// ── 19b. FS path inputs ──────────────────────────────────────────────────────
+
+async function testFsPathInputs() {
+    section('FS path inputs');
+
+    const { gpu } = await import('../src/js/gpu.js');
+    const wasmpegApi = (await import('../src/js/wasmpeg.mjs')).default;
+    await wasmpegApi.load();
+
+    gpu.FS.writeFile('/fs-input.wav', new Uint8Array(makeWav(8000, 2, 400)));
+
+    const info = await wasmpegApi.probe('/fs-input.wav');
+    ok('probe reads a wasm fs path',    info.format.includes('wav'));
+    ok('probe sees the audio params',   info.audio.sampleRate === 8000 && info.audio.channels === 2);
+
+    const a = await wasmpegApi.decodeAudio('/fs-input.wav');
+    ok('decodeAudio reads a wasm fs path', a.channels === 2);
+    let total = 0, chunk;
+    while ((chunk = a.nextSamples())) total += chunk.length;
+    a.close();
+    ok('fs path audio decodes fully', total === 400 * 2);
+
+    gpu.FS.writeFile('/fs-input.png', new Uint8Array(makeTinyPng(8, 8)));
+    const d = await wasmpegApi.decode('/fs-input.png');
+    ok('decode still reads a wasm fs path', d.width === 8 && d.height === 8);
+    d.close();
+}
+
 // ── 20. Preset composition ───────────────────────────────────────────────────
 
 async function testPresets() {
@@ -968,6 +996,7 @@ testArgStructure();
 await testAudioProbeEncoder();
 await testSessionPoolBounds();
 await testHintRoutingParity();
+await testFsPathInputs();
 await testPresets();
 
 const total = passed + failed + skipped;
