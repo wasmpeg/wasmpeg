@@ -1,0 +1,174 @@
+---
+title: Next.js
+description: Use wasmpeg in a Next.js app — client-side decoding in the App Router, serving the WASM from public/, server-side thumbnails in a Node Route Handler, and worker offloading.
+---
+
+import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+wasmpeg runs in the browser, so in Next.js it belongs in Client Components. It also runs in
+Node-based Route Handlers when you'd rather decode on the server. The one place it can't run
+is the Edge runtime, which doesn't expose the Node APIs the loader needs.
+
+## Client component (App Router)
+
+<Steps>
+
+1. Install, then copy the WASM into `public/`. Next serves `public/` at the site root, and
+   copying the binaries there sidesteps any bundler question about how the package resolves
+   its `.wasm`:
+
+   ```sh
+   npm install wasmpeg
+   cp node_modules/wasmpeg/dist/cpu.* public/wasmpeg/
+   ```
+
+2. Decode in a Client Component, loading from the path you copied to:
+
+   ```tsx
+   'use client';
+   import { useEffect, useRef } from 'react';
+   import wasmpeg from 'wasmpeg';
+
+   export function Thumbnail({ file }: { file: File }) {
+       const ref = useRef<HTMLCanvasElement>(null);
+
+       useEffect(() => {
+           let dec: Awaited<ReturnType<typeof wasmpeg.decode>> | undefined;
+           let cancelled = false;
+
+           (async () => {
+               await wasmpeg.load({ wasmPath: '/wasmpeg/cpu.js' });
+               if (cancelled) return;
+               dec = await wasmpeg.decode(file);
+               const frame = dec.nextFrame();
+               if (!frame) return;
+               const c = ref.current!;
+               c.width = dec.width;
+               c.height = dec.height;
+               c.getContext('2d')!.putImageData(
+                   new ImageData(frame, dec.width, dec.height), 0, 0,
+               );
+           })();
+
+           return () => {
+               cancelled = true;
+               dec?.close();
+           };
+       }, [file]);
+
+       return <canvas ref={ref} />;
+   }
+   ```
+
+</Steps>
+
+The `cancelled` flag guards against Strict Mode's double-invoked effects in development and
+against the file prop changing mid-decode. Close the decoder in cleanup either way.
+
+<Aside type="caution" title="Client Components only">
+Importing wasmpeg into a Server Component, or calling `decode` during server rendering, will
+fail — decoding needs runtime APIs that aren't present while the server renders your tree.
+Keep `import wasmpeg` behind `'use client'`, or move the work into a Route Handler as shown
+below.
+</Aside>
+
+### Dynamic import to keep WASM out of the initial bundle
+
+The component above pulls wasmpeg into the client bundle for the route it lives on. If the
+feature is rarely used, load the component lazily so the WASM glue isn't fetched until
+someone actually needs it:
+
+```tsx
+'use client';
+import dynamic from 'next/dynamic';
+
+const Thumbnail = dynamic(() => import('./Thumbnail').then((m) => m.Thumbnail), {
+    ssr: false,
+    loading: () => <p>Loading decoder…</p>,
+});
+```
+
+`ssr: false` also documents the intent: this code is browser-only.
+
+## Server-side (Route Handler)
+
+To generate thumbnails on the server, use a Route Handler pinned to the Node runtime. Here
+the input arrives as request bytes, so you hand wasmpeg a `Uint8Array` directly — `File` and
+canvas types don't exist on the server.
+
+```ts
+// app/api/thumbnail/route.ts
+import wasmpeg from 'wasmpeg';
+
+export const runtime = 'nodejs';
+
+let ready: Promise<void> | undefined;
+
+export async function POST(req: Request) {
+    ready ??= wasmpeg.load();
+    await ready;
+
+    const bytes = new Uint8Array(await req.arrayBuffer());
+    const jpg = await wasmpeg.encode(bytes, {
+        codec: 'mjpeg',
+        width: 640,
+        height: 360,
+        frames: 1,
+    });
+
+    return new Response(jpg, {
+        headers: {
+            'Content-Type': 'image/jpeg',
+            'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+    });
+}
+```
+
+Caching the module promise at module scope means the WASM compiles once per server instance
+instead of on every request. `encode` opens and closes its own decoder/encoder internally,
+so there's nothing to clean up after the call.
+
+<Aside type="note">
+Use `export const runtime = 'nodejs'`, not the Edge runtime. The loader reads the `.wasm`
+through Node's `fs` when running server-side, and the Edge runtime doesn't provide it. On the
+server the bundled binary resolves on its own, so you don't need the `wasmPath` option there.
+</Aside>
+
+## Offload long decodes to a Worker
+
+For anything beyond a single frame on the client — scrubbing, multi-frame extraction,
+filtering a whole clip — run the work in a Web Worker so the UI stays responsive. The API is
+identical inside a worker; you just need a browser-reachable path to the WASM, which is why
+the `public/` copy is handy:
+
+```ts
+// app/decode.worker.ts
+import wasmpeg from 'wasmpeg';
+
+self.onmessage = async (e: MessageEvent<{ file: File }>) => {
+    await wasmpeg.load({ wasmPath: '/wasmpeg/cpu.js' });
+    const dec = await wasmpeg.decode(e.data.file);
+    try {
+        for (let frame; (frame = dec.nextFrame()); ) {
+            self.postMessage({ width: dec.width, height: dec.height, frame }, [frame.buffer]);
+        }
+    } finally {
+        dec.close();
+        self.postMessage({ done: true });
+    }
+};
+```
+
+```tsx
+'use client';
+const worker = new Worker(new URL('./decode.worker.ts', import.meta.url));
+```
+
+Next.js compiles workers referenced through `new URL(..., import.meta.url)`. Transferring
+`frame.buffer` avoids copying each frame's pixels back to the main thread.
+
+## Related
+
+- [Quick start](/start/quick-start/) · [Encode & thumbnails](/guides/encode/) ·
+  [Probe metadata](/guides/probe/) · [Troubleshooting](/guides/troubleshooting/)

@@ -1,0 +1,183 @@
+---
+title: Decode audio to PCM
+description: Decode any supported audio stream to interleaved 32-bit float PCM in [-1, 1] — the exact format the Web Audio API expects.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+`wasmpeg.decodeAudio()` opens an audio decoder and returns a sample iterator. Output is
+always **32-bit float, interleaved by channel** (`[L0, R0, L1, R1, …]`) in the range
+`[-1, 1]` — the format the Web Audio API wants when you fill an `AudioBuffer`.
+
+Like the video decoder, this iterator is lazy: each `nextSamples()` call decodes the next
+packet on demand, so memory stays flat across a long file.
+
+## Synopsis
+
+```js
+const aud = await wasmpeg.decodeAudio(input, options?);
+
+aud.channels        // number — channel count
+aud.sampleRate      // number — sample rate in Hz
+aud.nextSamples()   // Float32Array (interleaved f32) | null at EOF
+aud.close()         // void — frees the session slot
+```
+
+## Description
+
+`decodeAudio()` takes a `File`, a `Blob`, an `http(s)` URL string, a `Uint8Array`, or an
+`ArrayBuffer`. It does not accept raw pixel inputs, and it doesn't read from WASM FS paths
+— pass the bytes instead.
+
+Opening the decoder reads enough of the container to set up the audio stream, so
+`channels` and `sampleRate` are available before you pull any samples. Each
+`nextSamples()` returns one chunk of interleaved float samples; chunk length varies with
+the codec's frame size, so don't assume a fixed count. At end of stream you get `null`,
+which ends the loop.
+
+The values you get back are the source's own sample rate and channel layout. wasmpeg
+converts the *sample format* to float and packs planar audio into interleaved order, but
+it doesn't resample or remix. See [Resampling](#resampling-and-remixing) if you need a
+different rate or channel count.
+
+## Parameters
+
+`decodeAudio(input, options?)`
+
+- **`input`** — the media to decode. One of `File`, `Blob`, URL string, `Uint8Array`, or
+  `ArrayBuffer`.
+- **`options.format`** — optional demuxer name to force, for formats that don't
+  content-probe. See [Forcing a demuxer](#forcing-a-demuxer).
+
+## Basic loop
+
+<Steps>
+
+1. Load the module, then open a decoder.
+
+   ```js
+   import wasmpeg from 'wasmpeg';
+   await wasmpeg.load();
+
+   const aud = await wasmpeg.decodeAudio(file);
+   console.log(aud.channels, aud.sampleRate);
+   ```
+
+2. Pull chunks until the stream ends, then close.
+
+   ```js
+   let chunk;
+   while ((chunk = aud.nextSamples())) {
+       // chunk is a Float32Array of interleaved samples
+   }
+   aud.close();
+   ```
+
+</Steps>
+
+`nextSamples()` returns `null` at end of stream. Each chunk holds whole frames of
+interleaved samples, so its length is always a multiple of `aud.channels`.
+
+## Collect into an AudioBuffer
+
+To hand decoded audio to the Web Audio API you need it de-interleaved — one
+`Float32Array` per channel. Collect the chunks, concatenate, then split by channel:
+
+```js
+const aud = await wasmpeg.decodeAudio(file);
+const chunks = [];
+let chunk;
+while ((chunk = aud.nextSamples())) chunks.push(chunk);
+aud.close();
+
+// Flatten and de-interleave into a Web Audio AudioBuffer
+const total = chunks.reduce((n, c) => n + c.length, 0);
+const interleaved = new Float32Array(total);
+let off = 0;
+for (const c of chunks) { interleaved.set(c, off); off += c.length; }
+
+const frames = total / aud.channels;
+const ctx = new AudioContext({ sampleRate: aud.sampleRate });
+const buffer = ctx.createBuffer(aud.channels, frames, aud.sampleRate);
+for (let ch = 0; ch < aud.channels; ch++) {
+    const out = buffer.getChannelData(ch);
+    for (let i = 0; i < frames; i++) out[i] = interleaved[i * aud.channels + ch];
+}
+```
+
+A `frame` here is one sample per channel, which is the unit `createBuffer` counts in — not
+to be confused with a video frame.
+
+<Aside type="tip">
+Construct the `AudioContext` with the source's `sampleRate` so playback runs at the
+intended pitch. If you let the context default to the device rate and it differs from the
+file's, the audio plays back sharp or flat. The alternative is to resample to the device
+rate — see below.
+</Aside>
+
+## Stream without buffering everything
+
+For long files you don't have to collect the whole track before you start. Feed chunks
+into an `AudioWorklet`, or schedule short `AudioBufferSourceNode`s back to back, so
+playback begins while decoding continues. The decoder's pull model fits this naturally:
+pull a chunk, queue it, pull the next.
+
+The trade-off is bookkeeping — you manage timing and the queue yourself. For one-shot
+loads, collecting into a single `AudioBuffer` (above) is simpler and usually fine.
+
+## Resampling and remixing
+
+wasmpeg gives you the source rate and channel count unchanged. To change either, run a
+filtergraph through [`run()`](/reference/high-level/) or convert in Web Audio:
+
+- **Resample** with the `aresample` filter (for example to force 48 kHz), or let an
+  `OfflineAudioContext` at the target rate do it during render.
+- **Remix** channels with the `pan` or `aformat` filters, or sum channels yourself in the
+  de-interleave step above.
+
+## Forcing a demuxer
+
+As with video, some container types can't be identified from their bytes alone. Pass
+`format` to name the demuxer:
+
+```js
+const aud = await wasmpeg.decodeAudio(bytes, { format: 'g722' });
+```
+
+When the input is a `File` or URL with a known extension, wasmpeg infers the hint from the
+name, so you usually only need this for a bare `Uint8Array` of a headerless format.
+
+## Return shape
+
+```ts
+aud.channels     // number — channel count
+aud.sampleRate   // number — sample rate in Hz
+aud.nextSamples()  // Float32Array (interleaved f32, [-1, 1]) | null at EOF
+aud.close()        // void — frees the session slot
+```
+
+## Session slots
+
+Audio decoders draw from the same pool of 8 session slots as video decode and probe. A
+decoder holds one slot from `decodeAudio()` until `close()`, so close every decoder you
+open — wrap the work in `try` / `finally` if it can throw:
+
+```js
+const aud = await wasmpeg.decodeAudio(file);
+try {
+    let chunk;
+    while ((chunk = aud.nextSamples())) {
+        // ...
+    }
+} finally {
+    aud.close();
+}
+```
+
+Leak enough slots and the next open fails with `ENOMEM (-12)`. See the
+[error reference](/reference/errors/) for the return codes.
+
+## See also
+
+- [Decode video frames](/guides/decode-video/) — the matching iterator for video.
+- [Probe metadata](/guides/probe/) — read sample rate and channel count without decoding.

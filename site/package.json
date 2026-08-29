@@ -1,0 +1,28 @@
+{
+  "name": "wasmpeg-site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "og": "node scripts/gen-og.mjs",
+    "logo": "node scripts/gen-logo.mjs",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "^3.7.3",
+    "@astrojs/starlight": "^0.40.0",
+    "@astrojs/starlight-tailwind": "^5.0.0",
+    "@fontsource-variable/geist": "^5.2.9",
+    "@fontsource-variable/geist-mono": "^5.2.8",
+    "@tailwindcss/vite": "^4.3.1",
+    "astro": "^6.4.6",
+    "sharp": "^0.35.1",
+    "tailwindcss": "^4.3.1"
+  },
+  "overrides": {
+    "vite": "7.3.5"
+  }
+}

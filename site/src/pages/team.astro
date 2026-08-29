@@ -1,0 +1,234 @@
+---
+import '../styles/global.css';
+import SiteNav from '../components/SiteNav.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+import ThemeScript from '../components/ThemeScript.astro';
+
+const REPO = 'wasmpeg/wasmpeg';
+const GITHUB = `https://github.com/${REPO}`;
+
+const title = 'Team — wasmpeg';
+const description =
+    'The people building wasmpeg. Contributors are pulled live from the GitHub repository ' +
+    'at build time — open a pull request and you will show up here.';
+
+// A build-time GitHub token (set GITHUB_TOKEN in the Cloudflare Pages build env) lifts the
+// unauthenticated 60 req/hr limit to 5,000 — only matters as the contributor list grows.
+const TOKEN = process.env.GITHUB_TOKEN ?? import.meta.env.GITHUB_TOKEN;
+const headers = {
+    'User-Agent': 'wasmpeg-site',
+    Accept: 'application/vnd.github+json',
+    ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}),
+};
+
+// Shown only if the GitHub API can't be reached at build time, so the page never breaks.
+const FALLBACK = [
+    {
+        login: 'pocopepe',
+        name: 'pocopepe',
+        avatar: 'https://avatars.githubusercontent.com/u/62478294?v=4',
+        url: 'https://github.com/pocopepe',
+        bio: '',
+        contributions: null,
+        location: '',
+        company: '',
+        links: [],
+    },
+];
+
+function normalizeUrl(u) {
+    if (!u) return '';
+    return /^https?:\/\//.test(u) ? u : `https://${u}`;
+}
+
+async function getTeam() {
+    try {
+        const res = await fetch(
+            `https://api.github.com/repos/${REPO}/contributors?per_page=100`,
+            { headers },
+        );
+        if (!res.ok) throw new Error(`contributors ${res.status}`);
+        const contributors = await res.json();
+
+        const people = await Promise.all(
+            contributors
+                .filter((c) => c.type === 'User' && !c.login.endsWith('[bot]'))
+                .map(async (c) => {
+                    const [profile, socials] = await Promise.all([
+                        fetch(`https://api.github.com/users/${c.login}`, { headers })
+                            .then((r) => (r.ok ? r.json() : {}))
+                            .catch(() => ({})),
+                        fetch(`https://api.github.com/users/${c.login}/social_accounts`, { headers })
+                            .then((r) => (r.ok ? r.json() : []))
+                            .catch(() => []),
+                    ]);
+
+                    const links = [];
+                    if (profile.blog) links.push({ label: 'Website', url: normalizeUrl(profile.blog) });
+                    if (profile.twitter_username)
+                        links.push({ label: 'X', url: `https://x.com/${profile.twitter_username}` });
+                    for (const s of socials) links.push({ label: s.provider, url: s.url });
+
+                    // Drop duplicates (e.g. twitter_username + a `twitter` social account).
+                    const seen = new Set();
+                    const uniqueLinks = links.filter((l) => l.url && !seen.has(l.url) && seen.add(l.url));
+
+                    return {
+                        login: c.login,
+                        name: profile.name || c.login,
+                        avatar: c.avatar_url,
+                        url: c.html_url,
+                        bio: profile.bio || '',
+                        company: profile.company || '',
+                        location: profile.location || '',
+                        contributions: c.contributions,
+                        links: uniqueLinks,
+                    };
+                }),
+        );
+        return people.length ? people : FALLBACK;
+    } catch {
+        return FALLBACK;
+    }
+}
+
+const team = await getTeam();
+const liveData = team !== FALLBACK;
+const labelFor = (p) => (p === 'twitter' ? 'X' : p.charAt(0).toUpperCase() + p.slice(1));
+---
+
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <ThemeScript />
+        <title>{title}</title>
+        <meta name="description" content={description} />
+        <link rel="canonical" href="https://wasmpeg.pages.dev/team/" />
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={description} />
+        <meta property="og:image" content="https://wasmpeg.pages.dev/og.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+    </head>
+    <body class="m-0 min-h-screen bg-[var(--bg)] font-sans text-[var(--fg)] antialiased">
+        <SiteNav />
+
+        <!-- hero -->
+        <section class="mx-auto max-w-5xl px-6">
+            <div class="mx-auto max-w-2xl pt-20 pb-10 text-center">
+                <p class="mb-5 font-mono text-xs uppercase tracking-[0.2em] text-[var(--fg-subtle)]">
+                    Built with love
+                </p>
+                <h1 class="bg-linear-to-b from-[var(--fg-strong)] to-[var(--fg-muted)] bg-clip-text text-balance text-4xl font-semibold leading-[1.1] tracking-tight text-transparent sm:text-5xl">
+                    The team behind
+                    <span class="bg-linear-to-r from-sky-400 to-cyan-300 bg-clip-text text-transparent">wasmpeg</span>
+                </h1>
+                <p class="mx-auto mt-5 max-w-xl text-pretty text-lg leading-relaxed text-[var(--fg-muted)]">
+                    Everyone who has contributed to the project, pulled from the GitHub repository.
+                    Send a pull request and you will show up here.
+                </p>
+            </div>
+        </section>
+
+        <!-- team grid -->
+        <section class="mx-auto max-w-5xl px-6 pb-8">
+            <div class="grid gap-px overflow-hidden rounded-xl border border-[var(--hairline)] bg-[var(--hairline)] sm:grid-cols-2 lg:grid-cols-3">
+                {
+                    team.map((person) => (
+                        <div class="flex flex-col bg-[var(--bg)] p-6">
+                            <div class="flex items-center gap-4">
+                                <img
+                                    src={`${person.avatar}${person.avatar.includes('?') ? '&' : '?'}s=120`}
+                                    alt={person.name}
+                                    width="56"
+                                    height="56"
+                                    loading="lazy"
+                                    class="h-14 w-14 rounded-full border border-[var(--hairline)] bg-neutral-900"
+                                />
+                                <div class="min-w-0">
+                                    <a
+                                        href={person.url}
+                                        class="block truncate font-medium text-[var(--fg-strong)] no-underline hover:text-sky-300"
+                                    >
+                                        {person.name}
+                                    </a>
+                                    <a
+                                        href={person.url}
+                                        class="block truncate font-mono text-xs text-[var(--fg-subtle)] no-underline hover:text-sky-300"
+                                    >
+                                        @{person.login}
+                                    </a>
+                                </div>
+                            </div>
+
+                            {person.bio && (
+                                <p class="mt-4 line-clamp-3 text-sm leading-relaxed text-[var(--fg-muted)]">
+                                    {person.bio}
+                                </p>
+                            )}
+
+                            <div class="mt-auto pt-4">
+                                {(person.location || person.company) && (
+                                    <p class="font-mono text-[11px] text-[var(--fg-faint)]">
+                                        {[person.company, person.location].filter(Boolean).join(' · ')}
+                                    </p>
+                                )}
+                                <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                                    {person.contributions != null && (
+                                        <span class="text-[var(--fg-subtle)]">
+                                            {person.contributions} commits
+                                        </span>
+                                    )}
+                                    {person.links.map((l) => (
+                                        <a
+                                            href={l.url}
+                                            class="text-sky-400/80 no-underline transition-colors hover:text-sky-300"
+                                        >
+                                            {labelFor(l.label)}
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                }
+            </div>
+
+            {
+                !liveData && (
+                    <p class="mt-4 text-center font-mono text-xs text-[var(--fg-faint)]">
+                        Showing fallback data — GitHub was unreachable at build time.
+                    </p>
+                )
+            }
+        </section>
+
+        <!-- contribute CTA -->
+        <section class="mx-auto max-w-5xl px-6 pt-12 pb-20">
+            <div class="rounded-xl border border-[var(--hairline)] bg-[var(--panel)] p-8 text-center">
+                <h2 class="text-xl font-semibold tracking-tight text-[var(--fg-strong)]">Want to be on this page?</h2>
+                <p class="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-[var(--fg-muted)]">
+                    wasmpeg is open source. Merge a pull request and the next build adds you
+                    automatically — name, avatar, and the links from your GitHub profile.
+                </p>
+                <div class="mt-6 flex flex-wrap items-center justify-center gap-3">
+                    <a
+                        href={GITHUB}
+                        class="rounded-md btn-primary px-4 py-2 text-sm font-medium no-underline transition"
+                        >View on GitHub</a
+                    >
+                    <a
+                        href={`${GITHUB}/blob/main/CONTRIBUTING.md`}
+                        class="rounded-md border border-[var(--hairline-strong)] px-4 py-2 text-sm font-medium text-[var(--fg)] no-underline transition hover:border-sky-400/40 hover:bg-[var(--panel-hover)] hover:text-[var(--fg-strong)]"
+                        >Contributing guide</a
+                    >
+                </div>
+            </div>
+        </section>
+
+        <SiteFooter />
+    </body>
+</html>

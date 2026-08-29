@@ -1,0 +1,290 @@
+---
+title: Examples
+description: Complete, copy-paste end-to-end examples — a frame player, a thumbnail strip, a drag-and-drop probe, audio extraction, and a worker-based decoder.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Full, runnable snippets that combine the API into real features. Each assumes the module is
+loaded:
+
+```js
+import wasmpeg from 'wasmpeg';
+await wasmpeg.load();
+```
+
+`load()` is idempotent — call it once at startup or at the top of each function; repeat calls
+resolve instantly. Everything that opens a decoder, audio decoder, or probe session draws from
+a pool of 8 shared slots, so every example here pairs the open with a `close()` (in a
+`finally` where a loop can throw). Skip that and you'll hit `ENOMEM (-12)` after a handful of
+operations — see [Troubleshooting](/guides/troubleshooting/#enomem--12-after-a-few-operations).
+
+## Play a video frame-by-frame to a canvas
+
+Paced to the display with `requestAnimationFrame`, with cleanup.
+
+```js
+async function play(file, canvas) {
+    const dec = await wasmpeg.decode(file);
+    canvas.width = dec.width;
+    canvas.height = dec.height;
+    const ctx = canvas.getContext('2d');
+
+    try {
+        let frame;
+        while ((frame = dec.nextFrame())) {
+            ctx.putImageData(new ImageData(frame, dec.width, dec.height), 0, 0);
+            await new Promise(requestAnimationFrame);
+        }
+    } finally {
+        dec.close();
+    }
+}
+```
+
+`nextFrame()` returns a fresh `Uint8ClampedArray` of RGBA8 (`width × height × 4` bytes) per
+call, and `null` at end of stream — which is what ends the `while`. Wrapping it in `ImageData`
+is zero-copy: the constructor takes the buffer as-is.
+
+<Aside type="tip">
+This decodes as fast as it can render. To match real playback speed, throttle to
+`1000 / dec.fps` ms per frame instead of one `rAF`.
+</Aside>
+
+### Playback at source frame rate
+
+`rAF` paces to the display, not the media. To honor the file's own frame rate, sleep the
+remainder of each frame's budget:
+
+```js
+async function playAtRate(file, canvas) {
+    const dec = await wasmpeg.decode(file);
+    canvas.width = dec.width;
+    canvas.height = dec.height;
+    const ctx = canvas.getContext('2d');
+    const frameMs = 1000 / dec.fps;   // dec.fps = fpsNum / fpsDen
+
+    try {
+        let frame;
+        while ((frame = dec.nextFrame())) {
+            const start = performance.now();
+            ctx.putImageData(new ImageData(frame, dec.width, dec.height), 0, 0);
+            const elapsed = performance.now() - start;
+            if (elapsed < frameMs) await new Promise(r => setTimeout(r, frameMs - elapsed));
+        }
+    } finally {
+        dec.close();
+    }
+}
+```
+
+There's no seeking, so playback always runs from the first frame to EOF. For scrubbing, decode
+to an array of frames up front (watch memory on long clips) and index into it.
+
+## Build a thumbnail strip
+
+Decode straight to a small size to keep memory low, sampling every Nth frame.
+
+```js
+async function thumbnails(file, { every = 30, w = 160, h = 90 } = {}) {
+    const dec = await wasmpeg.decode(file);
+    const out = [];
+    try {
+        let frame, i = 0;
+        while ((frame = dec.nextFrame(w, h))) {
+            if (i++ % every === 0) {
+                const c = new OffscreenCanvas(w, h);
+                c.getContext('2d').putImageData(new ImageData(frame, w, h), 0, 0);
+                out.push(await c.convertToBlob({ type: 'image/jpeg' }));
+            }
+        }
+    } finally {
+        dec.close();
+    }
+    return out;   // Blob[]
+}
+```
+
+`nextFrame(w, h)` asks the decoder to resample each frame to `w × h` as it reads, so the
+strip never holds full-resolution pixels. Note this still decodes *every* frame and skips most
+in JS — there's no `-ss`/seek to jump straight to frame N. For a wide strip with regular
+spacing, that's fine; for a couple of thumbnails from a long file, expect to walk the whole
+stream.
+
+## Drag-and-drop probe
+
+Show metadata the moment a file is dropped — no decode needed.
+
+```js
+dropZone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    const info = await wasmpeg.probe(file);
+
+    const hasVideo = info.streams.some(s => s.type === 'video');
+    const dims = hasVideo ? `${info.video.width}×${info.video.height} · ` : '';
+
+    label.textContent =
+        `${info.format} · ${dims}` +
+        `${(info.duration ?? 0).toFixed(1)}s · ${info.bitrate} kb/s`;
+});
+```
+
+`probe()` opens its own session and closes it before returning, so there's no `close()` to
+call here. Guard `info.video` for audio-only files (an MP3 reports `width: 0`) and `duration`
+for containers that don't store it — it comes back `null`, not `0`.
+
+## Detect what a file contains
+
+A small classifier built entirely from `probe()` — no decoding:
+
+```js
+async function describe(file) {
+    const info = await wasmpeg.probe(file);
+    const types = new Set(info.streams.map(s => s.type));
+    return {
+        container: info.format,
+        hasVideo:  types.has('video'),
+        hasAudio:  types.has('audio'),
+        seconds:   info.duration,            // null if unknown
+        fps:       info.video.fpsDen ? info.video.fpsNum / info.video.fpsDen : null,
+        resolution: info.video.width ? `${info.video.width}x${info.video.height}` : null,
+    };
+}
+```
+
+## First-frame poster image
+
+```js
+async function poster(file) {
+    const jpg = await wasmpeg.encode(file, { codec: 'mjpeg', frames: 1 });
+    return URL.createObjectURL(new Blob([jpg], { type: 'image/jpeg' }));
+}
+
+posterImg.src = await poster(file);
+```
+
+`encode()` manages its own decoder and encoder sessions and closes both before returning, so
+there's nothing to clean up. `frames: 1` stops after the first frame; drop it to encode the
+whole stream into an image2pipe sequence. Remember to revoke the object URL
+(`URL.revokeObjectURL`) when the poster is no longer on screen.
+
+## Re-encode a canvas to a different image format
+
+`encode()` takes raw-pixel inputs too, so a canvas, `ImageData`, or video element goes in
+directly — no file needed:
+
+```js
+async function canvasToJpeg(canvas, quality) {
+    // codec: 'png' for lossless, 'mjpeg' for JPEG
+    const bytes = await wasmpeg.encode(canvas, {
+        codec: 'mjpeg',
+        bitrate: quality ? quality * 100_000 : 0,   // 0 = codec default
+    });
+    return new Blob([bytes], { type: 'image/jpeg' });
+}
+```
+
+For a single still, `width`/`height` default to the source size, so you don't need a `scale=`
+filter. Pass them only to resize on the way out.
+
+## Scale a frame onto a canvas
+
+`scale()` returns RGBA pixels at the target size — paint them with `putImageData`:
+
+```js
+async function drawScaled(file, canvas, w, h) {
+    const rgba = await wasmpeg.scale(file, w, h);   // Uint8ClampedArray, w×h×4
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext('2d').putImageData(new ImageData(rgba, w, h), 0, 0);
+}
+```
+
+`scale()` filters a single frame (the first), so it's the right call for a one-off resized
+still. For a custom graph — crop, color grade, blur — pass it as the fourth argument, ending
+in an explicit `scale=W:H`:
+
+```js
+const rgba = await wasmpeg.scale(file, w, h, `crop=640:480:0:0,scale=${w}:${h}`);
+```
+
+## Extract audio into a Web Audio buffer
+
+```js
+async function toAudioBuffer(file) {
+    const aud = await wasmpeg.decodeAudio(file);
+    const chunks = [];
+    try {
+        let chunk;
+        while ((chunk = aud.nextSamples())) chunks.push(chunk);
+    } finally {
+        aud.close();
+    }
+
+    const total = chunks.reduce((n, c) => n + c.length, 0);
+    const interleaved = new Float32Array(total);
+    let off = 0;
+    for (const c of chunks) { interleaved.set(c, off); off += c.length; }
+
+    const frames = total / aud.channels;
+    // AudioContext resamples to its own rate; pass the source rate so it doesn't.
+    const ctx = new AudioContext({ sampleRate: aud.sampleRate });
+    const buffer = ctx.createBuffer(aud.channels, frames, aud.sampleRate);
+    for (let ch = 0; ch < aud.channels; ch++) {
+        const data = buffer.getChannelData(ch);
+        for (let i = 0; i < frames; i++) data[i] = interleaved[i * aud.channels + ch];
+    }
+    return buffer;
+}
+```
+
+## Decode in a Web Worker
+
+Keep the main thread responsive by decoding off it. The API is identical inside a worker.
+
+```js
+// worker.js
+import wasmpeg from 'wasmpeg';
+
+onmessage = async (e) => {
+    await wasmpeg.load();
+    const dec = await wasmpeg.decode(e.data.file);
+    try {
+        let frame;
+        while ((frame = dec.nextFrame())) {
+            // transfer the buffer to avoid a copy
+            postMessage({ frame, w: dec.width, h: dec.height }, [frame.buffer]);
+        }
+    } finally {
+        dec.close();
+    }
+    postMessage({ done: true });
+};
+```
+
+Each `nextFrame()` hands back an independent copy, so transferring `frame.buffer` to the main
+thread is safe — the decoder isn't holding a reference to it. Decoding is synchronous CPU work;
+moving it to a worker keeps the UI responsive on long files. The API is byte-for-byte the same
+inside a worker, including `load()`.
+
+<Aside type="caution">
+Workers must be module workers (`{ type: 'module' }`) so the `import` resolves. wasmpeg needs
+no COOP/COEP headers or `SharedArrayBuffer`, so a plain worker on a static host is enough.
+</Aside>
+
+```js
+// main.js
+const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+worker.postMessage({ file });
+worker.onmessage = ({ data }) => {
+    if (data.done) return;
+    ctx.putImageData(new ImageData(data.frame, data.w, data.h), 0, 0);
+};
+```
+
+## More
+
+- [FFmpeg → wasmpeg](/guides/ffmpeg-recipes/) — command-to-call recipes.
+- [Decode video](/guides/decode-video/) · [Decode audio](/guides/decode-audio/) ·
+  [Encode](/guides/encode/)

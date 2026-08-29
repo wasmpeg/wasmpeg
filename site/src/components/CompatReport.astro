@@ -1,0 +1,205 @@
+---
+import { readFateStats } from '../lib/fate.js';
+
+const data = readFateStats();
+
+function barColor(rate) {
+    if (rate >= 95) return '#34d399'; // emerald
+    if (rate >= 80) return '#38bdf8'; // sky
+    if (rate >= 50) return '#fbbf24'; // amber
+    return '#fb7185'; // rose
+}
+
+const compat = data?.compat;
+const correctness = data?.correctness;
+// Sort charts by test volume so the high-signal codecs lead.
+const compatRows = compat ? [...compat.codecs].sort((a, b) => b.total - a.total) : [];
+const corrRows = correctness ? [...correctness.codecs].sort((a, b) => b.total - a.total) : [];
+
+// Build-time interpretation so the prose stays true to the numbers.
+const fmtList = (a) => (a.length > 1 ? `${a.slice(0, -1).join(', ')} and ${a.at(-1)}` : a.join(''));
+const compatPerfect = compatRows.filter((r) => r.rate === 100).length;
+const corrPerfect = corrRows.filter((r) => r.rate === 100).length;
+const compatGaps = compatRows
+    .filter((r) => r.rate < 100)
+    .sort((a, b) => a.rate - b.rate)
+    .slice(0, 4)
+    .map((r) => r.codec);
+---
+
+{
+    !data ? (
+        <p>FATE reports weren’t available at build time. They’re generated into <code>COMPAT.md</code> and <code>CORRECTNESS.md</code> at the repository root.</p>
+    ) : (
+        <div class="compat">
+            <p class="meta">
+                Last run <strong>{compat.meta.date}</strong> · commit <code>{compat.meta.commit}</code>
+                {compat.meta.wasm && <> · WASM <strong>{compat.meta.wasm}</strong></>}
+            </p>
+
+            <div class="cards">
+                <div class="card">
+                    <div class="card-label">Coverage</div>
+                    <div class="card-value">{compat.rate}%</div>
+                    <div class="card-sub">{compat.pass} / {compat.total} tests decode without error</div>
+                    <div class="track"><span style={`width:${compat.rate}%;background:${barColor(compat.rate)}`} /></div>
+                </div>
+                <div class="card">
+                    <div class="card-label">Correctness</div>
+                    <div class="card-value">{correctness.rate}%</div>
+                    <div class="card-sub">{correctness.pass} / {correctness.total} match FFmpeg byte-for-byte</div>
+                    <div class="track"><span style={`width:${correctness.rate}%;background:${barColor(correctness.rate)}`} /></div>
+                </div>
+            </div>
+
+            <p class="interpret">
+                In plain terms: of the {compat.codecs.length} codecs exercised, <strong>{compatPerfect} decode
+                every FATE sample without error</strong>, and {corrPerfect} of {correctness.codecs.length} video
+                codecs reproduce FFmpeg’s output byte-for-byte on every frame. The gap between the two bars is
+                normal — a decoder can run cleanly yet still differ on rounding or an unimplemented edge case,
+                which only the stricter correctness pass catches. {compatGaps.length > 0 && (
+                    <>The remaining coverage gaps are concentrated in {fmtList(compatGaps)} — usually a specific
+                    profile or feature rather than the whole codec.</>
+                )}
+            </p>
+
+            <h2 id="coverage-by-codec">Coverage by codec</h2>
+            <p>Does each FATE sample decode without erroring? Sorted by number of tests.</p>
+            <div class="chart">
+                {compatRows.map((c) => (
+                    <div class="row">
+                        <span class="name" title={c.type}>{c.codec}</span>
+                        <span class="bar"><span style={`width:${c.rate}%;background:${barColor(c.rate)}`} /></span>
+                        <span class="count">{c.pass}/{c.total}</span>
+                        <span class="rate" style={`color:${barColor(c.rate)}`}>{c.rate}%</span>
+                    </div>
+                ))}
+            </div>
+
+            <h2 id="correctness-by-codec">Correctness by codec</h2>
+            <p>Does every decoded frame match FFmpeg’s reference output exactly? Stricter than coverage.</p>
+            <div class="chart">
+                {corrRows.map((c) => (
+                    <div class="row">
+                        <span class="name">{c.codec}</span>
+                        <span class="bar"><span style={`width:${c.rate}%;background:${barColor(c.rate)}`} /></span>
+                        <span class="count">{c.correct}/{c.total}</span>
+                        <span class="rate" style={`color:${barColor(c.rate)}`}>{c.rate}%</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+<style>
+    .meta {
+        font-size: 0.85rem;
+        color: var(--sl-color-gray-3);
+    }
+    .interpret {
+        margin: 0 0 1.75rem;
+        padding: 0.9rem 1.1rem;
+        border-inline-start: 2px solid #38bdf8;
+        background: var(--sl-color-gray-6);
+        border-radius: 0 0.4rem 0.4rem 0;
+        font-size: 0.9rem;
+        line-height: 1.65;
+        color: var(--sl-color-gray-2);
+    }
+    .interpret strong {
+        color: var(--sl-color-white);
+    }
+    .cards {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+        margin: 1.5rem 0 2rem;
+    }
+    @media (min-width: 36rem) {
+        .cards {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+    .card {
+        border: 1px solid var(--sl-color-gray-5);
+        border-radius: 0.6rem;
+        padding: 1.1rem 1.25rem;
+    }
+    .card-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--sl-color-gray-3);
+    }
+    .card-value {
+        font-size: 2.25rem;
+        font-weight: 700;
+        line-height: 1.1;
+        color: var(--sl-color-white);
+    }
+    .card-sub {
+        font-size: 0.85rem;
+        color: var(--sl-color-gray-3);
+        margin-top: 0.15rem;
+    }
+    .track {
+        margin-top: 0.75rem;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--sl-color-gray-6);
+        overflow: hidden;
+    }
+    .track span {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+    }
+    .chart {
+        margin: 1rem 0 2.5rem;
+        display: grid;
+        grid-template-columns: 1fr;
+        column-gap: 2rem;
+        row-gap: 0.35rem;
+    }
+    @media (min-width: 48rem) {
+        .chart {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+    .row {
+        display: grid;
+        grid-template-columns: 3.75rem 1fr 2.6rem 2.75rem;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.72rem;
+    }
+    .name {
+        font-family: var(--sl-font-mono, monospace);
+        color: var(--sl-color-white);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .bar {
+        height: 6px;
+        border-radius: 999px;
+        background: var(--sl-color-gray-6);
+        overflow: hidden;
+    }
+    .bar span {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+    }
+    .count {
+        font-variant-numeric: tabular-nums;
+        color: var(--sl-color-gray-3);
+        text-align: right;
+    }
+    .rate {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        text-align: right;
+    }
+</style>
