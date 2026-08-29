@@ -144,6 +144,16 @@ const TRANSFORM_FLAGS = new Set([
     '-vf', '-af', '-filter_complex', '-lavfi', '-filter:v', '-filter:a',
     '-pix_fmt', '-s', '-map', '-c', '-vcodec', '-acodec', '-r',
     '-vframes', '-frames', '-ss', '-t', '-to',
+    // -fps_mode/-sws_flags on a decode-only CMD signal the ffmpeg CLI is
+    // auto-inserting a format/rate-normalizing conversion (typically because
+    // the stream changes pixel format or size mid-decode) before the muxer
+    // sees the frames. decoder_next_raw_frame exports each frame exactly as
+    // the decoder produced it, with no such normalization, so its reference
+    // isn't comparable to ours — this isn't a decoder bug, it's a different
+    // pipeline. -pixel_format/-video_size/-stride force the rawvideo demuxer
+    // to interpret arbitrary bytes as raw pixels at a size we have no way to
+    // pass through decoder_open_format, which only takes a format name.
+    '-fps_mode', '-sws_flags', '-pixel_format', '-video_size', '-stride',
 ]);
 
 function parseSamplePath(cmd) {
