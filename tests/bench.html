@@ -27,7 +27,8 @@
 
 <table id="results" style="display:none">
   <tr><th>Path</th><th>ms/frame</th><th>FPS equiv.</th><th>vs CPU</th></tr>
-  <tr><td>GPU (scale_webgpu)</td><td id="gpuMs">—</td><td id="gpuFps">—</td><td id="gpuVs">—</td></tr>
+  <tr><td>GPU, per-call device (pipeline_run_rgba_gpu)</td><td id="gpuMs">—</td><td id="gpuFps">—</td><td id="gpuVs">—</td></tr>
+  <tr><td>GPU, persistent session (gpu_session_run)</td>  <td id="gpuSessMs">—</td><td id="gpuSessFps">—</td><td id="gpuSessVs">—</td></tr>
   <tr><td>CPU (swscale)</td>      <td id="cpuMs">—</td><td id="cpuFps">—</td><td>baseline</td></tr>
 </table>
 
@@ -55,21 +56,33 @@ window.runBench = async function() {
 
     log(`Benchmarking ${srcW}x${srcH} → ${dstW}x${dstH}, ${iters} iterations...`);
 
-    const gpuMs = gpu.benchGpu(srcW, srcH, dstW, dstH, iters);
-    const cpuMs = gpu.benchCpu(srcW, srcH, dstW, dstH, iters);
+    // Per-call path creates and tears down the WebGPU device every iteration.
+    // The session path creates it once via gpu_session_open and reuses it —
+    // this pair is the actual P1 result, not the GPU-vs-CPU pair below.
+    const gpuMs     = gpu.benchGpu(srcW, srcH, dstW, dstH, iters);
+    const gpuSessMs = gpu.benchGpuSession(srcW, srcH, dstW, dstH, iters);
+    const cpuMs     = gpu.benchCpu(srcW, srcH, dstW, dstH, iters);
 
-    log(`GPU: ${gpuMs.toFixed(2)} ms/frame`);
-    log(`CPU: ${cpuMs.toFixed(2)} ms/frame`);
+    log(`GPU (per-call device):    ${gpuMs.toFixed(2)} ms/frame`);
+    log(`GPU (persistent session): ${gpuSessMs.toFixed(2)} ms/frame`);
+    log(`CPU (swscale):            ${cpuMs.toFixed(2)} ms/frame`);
+    if (gpuMs > 0 && gpuSessMs > 0)
+        log(`Session vs per-call: ${(gpuMs / gpuSessMs).toFixed(1)}× less overhead per frame`);
 
-    const ratio = cpuMs / gpuMs;
-    document.getElementById('gpuMs').textContent  = gpuMs.toFixed(2);
-    document.getElementById('cpuMs').textContent  = cpuMs.toFixed(2);
-    document.getElementById('gpuFps').textContent = (1000 / gpuMs).toFixed(1);
-    document.getElementById('cpuFps').textContent = (1000 / cpuMs).toFixed(1);
-    document.getElementById('gpuVs').textContent  = ratio >= 1
-        ? `${ratio.toFixed(1)}× faster`
-        : `${(1/ratio).toFixed(1)}× slower`;
-    document.getElementById('gpuVs').parentElement.className = ratio >= 1 ? 'win' : '';
+    const fillRow = (msId, fpsId, vsId, ms) => {
+        document.getElementById(msId).textContent  = ms > 0 ? ms.toFixed(2) : 'n/a';
+        document.getElementById(fpsId).textContent = ms > 0 ? (1000 / ms).toFixed(1) : 'n/a';
+        if (vsId && ms > 0 && cpuMs > 0) {
+            const ratio = cpuMs / ms;
+            const el = document.getElementById(vsId);
+            el.textContent = ratio >= 1 ? `${ratio.toFixed(1)}× faster` : `${(1 / ratio).toFixed(1)}× slower`;
+            el.parentElement.className = ratio >= 1 ? 'win' : '';
+        }
+    };
+    fillRow('gpuMs', 'gpuFps', 'gpuVs', gpuMs);
+    fillRow('gpuSessMs', 'gpuSessFps', 'gpuSessVs', gpuSessMs);
+    document.getElementById('cpuMs').textContent  = cpuMs > 0 ? cpuMs.toFixed(2) : 'n/a';
+    document.getElementById('cpuFps').textContent = cpuMs > 0 ? (1000 / cpuMs).toFixed(1) : 'n/a';
     document.getElementById('results').style.display = '';
 };
 
