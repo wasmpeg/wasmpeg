@@ -139,8 +139,12 @@ It supports `new FFmpeg()`, `load()`, `on()`/`off()` for `'log'` and `'progress'
 `writeFile`, `readFile`, `deleteFile`, `createDir`, `listDir`, and `terminate()`.
 
 `exec()` runs the decode + filter pipeline and returns the result: RGBA pixels for a
-filter op, or a decoder for a decode-only command. It does not transcode to an output
-file, so `exec([...]); readFile('out.mp4')` will not produce `out.mp4`.
+filter op, a decoder for a decode-only command, or — when the command names an output
+file — the encoded bytes, also written into the WASM FS so `readFile('out.gif')` works
+after `exec(['-i', 'in.mp4', 'out.gif'])`. Supported output extensions are `gif`, `png`,
+`jpg`, `bmp`, `tif`, `tga`, `dpx`, `avi`, `mkv`, `wav`, `flac`, and `ogg` — whatever this
+build's encoders cover. There is no H.264/HEVC/VP8/VP9/AV1 encoder in the LGPL build, so
+`.mp4`/`.webm` targets throw with a clear message rather than silently failing.
 
 ---
 

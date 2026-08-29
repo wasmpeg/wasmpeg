@@ -1163,6 +1163,58 @@ async function testAudioEncode() {
     venc.close();
 }
 
+// ── 25. Transcode to a named output ──────────────────────────────────────────
+
+async function testTranscode() {
+    section('Transcode');
+
+    const { FFmpeg, gpu } = await import('../src/js/index.js');
+    await gpu.load();
+
+    const ff = new FFmpeg();
+    await ff.load();
+    await ff.writeFile('tc-in.gif', new Uint8Array(makeAnimatedGif(8, 8, 5)));
+
+    // The flow ffmpeg.wasm users expect: name an output, then read it back.
+    const cases = [
+        ['tc-out.gif', [0x47, 0x49, 0x46, 0x38]],   // GIF8
+        ['tc-out.png', [0x89, 0x50, 0x4E, 0x47]],   // .PNG
+        ['tc-out.avi', [0x52, 0x49, 0x46, 0x46]],   // RIFF
+    ];
+    for (const [name, magic] of cases) {
+        await ff.exec(['-i', 'tc-in.gif', name]);
+        const out = await ff.readFile(name);
+        ok(`${name} is written to the fs`, out.length > 0);
+        ok(`${name} has the right container magic`, magic.every((b, i) => out[i] === b));
+    }
+
+    // An unsupported target must say so rather than write a broken file.
+    let err = null;
+    try { await ff.exec(['-i', 'tc-in.gif', 'tc-out.mp4']); } catch (e) { err = e; }
+    ok('unsupported output extension throws', err !== null && /no encoder for \.mp4/.test(err.message));
+
+    // A filtergraph decides the output geometry.
+    await ff.exec(['-i', 'tc-in.gif', '-vf', 'scale=4:4', 'tc-small.gif']);
+    const small = await ff.readFile('tc-small.gif');
+    const full  = await ff.readFile('tc-out.gif');
+    ok('scaled output is written', small.length > 0);
+    ok('scaling changes the output', small.length !== full.length);
+
+    // -vframes caps a transcode too.
+    await ff.exec(['-i', 'tc-in.gif', '-vframes', '1', 'tc-one.gif']);
+    const one = await ff.readFile('tc-one.gif');
+    ok('single-frame transcode is smaller than five', one.length < full.length);
+
+    // Audio outputs route to the audio encoder.
+    await ff.writeFile('tc-in.wav', new Uint8Array(makeWav(8000, 2, 2000)));
+    await ff.exec(['-i', 'tc-in.wav', 'tc-out.flac']);
+    const flac = await ff.readFile('tc-out.flac');
+    ok('flac output has the fLaC magic',
+        flac[0] === 0x66 && flac[1] === 0x4C && flac[2] === 0x61 && flac[3] === 0x43);
+
+    ff.terminate();
+}
+
 // ── run ──────────────────────────────────────────────────────────────────────
 
 const cpuJs    = path.join(ROOT, 'dist/cpu.js');
@@ -1194,6 +1246,7 @@ testExportCoverage();
 await testSeek();
 await testGpuSession();
 await testAudioEncode();
+await testTranscode();
 
 const total = passed + failed + skipped;
 console.log(`\n${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped\n`);
