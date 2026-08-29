@@ -33,11 +33,14 @@ export class FFmpeg {
     async load({ wasmPath } = {}) {
         if (this.#mod) return;
 
-        const path = wasmPath ?? (
-            typeof navigator !== 'undefined' && navigator.gpu
-                ? new URL('../../dist/webgpu.js', import.meta.url).href
-                : new URL('../../dist/cpu.js',    import.meta.url).href
-        );
+        // Mirrors gpu.load(): the WebGPU artifact is optional, so prefer it
+        // when the browser advertises support but never hard-fail on it.
+        const candidates = wasmPath
+            ? [wasmPath]
+            : (typeof navigator !== 'undefined' && navigator.gpu
+                ? [new URL('../../dist/webgpu.js', import.meta.url).href,
+                   new URL('../../dist/cpu.js',    import.meta.url).href]
+                : [new URL('../../dist/cpu.js',    import.meta.url).href]);
 
         const emit = (type, message) => this.#log.forEach(h => h({ type, message }));
 
@@ -45,13 +48,20 @@ export class FFmpeg {
         // anticipate. Passing wasmBinary directly bypasses the fetch/readFile
         // path entirely and works in both browser and Node.
         const isNode = typeof process !== 'undefined' && process.versions?.node;
-        let nodeOpts = {};
-        if (isNode) {
-            const { default: fsMod } = await import('node:fs');
-            nodeOpts = { wasmBinary: fsMod.readFileSync(new URL(path).pathname.replace(/\.js$/, '.wasm')) };
+        let factory = null, nodeOpts = {};
+        for (const cand of candidates) {
+            try {
+                nodeOpts = {};
+                if (isNode) {
+                    const { default: fsMod } = await import('node:fs');
+                    nodeOpts = { wasmBinary: fsMod.readFileSync(new URL(cand).pathname.replace(/\.js$/, '.wasm')) };
+                }
+                ({ default: factory } = await import(/* @vite-ignore */ cand));
+                break;
+            } catch (e) {
+                if (cand === candidates[candidates.length - 1]) throw e;
+            }
         }
-
-        const { default: factory } = await import(/* @vite-ignore */ path);
         this.#mod = await factory({
             print:    msg => emit('stdout', msg),
             printErr: msg => {
