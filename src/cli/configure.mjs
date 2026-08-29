@@ -76,7 +76,7 @@ const PRESETS = {
             // raw packed-pixel formats (.avi / .mov)
             'r210', 'v210', 'v410', 'r10k',
             // images
-            'png', 'apng', 'gif', 'bmp', 'tiff', 'webp', 'tga', 'targa', 'dpx', 'xbm',
+            'png', 'apng', 'gif', 'bmp', 'tiff', 'webp', 'targa', 'dpx', 'xbm',
             'sunrast', 'xface',
             'jpeg2000', 'jpegls', 'exr', 'psd',
             // modern audio
@@ -127,7 +127,7 @@ const PRESETS = {
         ],
         encoders: [
             // video
-            'mjpeg', 'png', 'gif', 'bmp', 'tiff', 'tga', 'dpx',
+            'mjpeg', 'png', 'gif', 'bmp', 'tiff', 'targa', 'dpx',
             'huffyuv', 'ffv1',
             // audio
             'aac', 'opus', 'flac', 'mp2', 'wavpack',
@@ -185,7 +185,7 @@ const PRESETS = {
             'image_tiff_pipe', 'image_webp_pipe',
             'image_j2k_pipe', 'image_jpeg_pipe', 'image_jpegls_pipe',
             'image_exr_pipe', 'image_psd_pipe',
-            'image_dpx_pipe', 'image_tga_pipe',
+            'image_dpx_pipe',
             'image_xbm_pipe', 'image_sunrast_pipe', 'image_xface_pipe',
             // PCM raw — covers all signed/unsigned/float variants used in FATE
             'pcm_s8', 'pcm_u8',
