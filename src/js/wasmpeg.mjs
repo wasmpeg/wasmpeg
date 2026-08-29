@@ -71,8 +71,10 @@ async function decodeAudio(input, { format } = {}) {
     assertLoaded();
     const norm = await normalizeInput(input);
     if (norm.rgba) throw new Error('decodeAudio() does not accept raw pixel input');
-    if (norm.fspath) throw new Error('decodeAudio() does not support FS paths yet');
-    return gpu.createAudioDecoder(norm.bytes, format ?? formatHint(norm.name));
+    // No audio_open_file export exists, so read the path out of the virtual FS
+    // and go through the byte path instead of refusing.
+    const bytes = norm.fspath ? gpu.FS.readFile(norm.fspath) : norm.bytes;
+    return gpu.createAudioDecoder(bytes, format ?? formatHint(norm.name));
 }
 
 /**
@@ -92,8 +94,7 @@ async function probe(input) {
     assertLoaded();
     const norm = await normalizeInput(input);
     if (norm.rgba) throw new Error('probe() does not accept raw pixel input');
-    if (norm.fspath) throw new Error('probe() does not support FS paths yet');
-    return gpu.probe(norm.bytes);
+    return gpu.probe(norm.fspath ? gpu.FS.readFile(norm.fspath) : norm.bytes);
 }
 
 /**
