@@ -226,7 +226,7 @@ const PRESETS = {
 
     // wasmpeg-full — GPL-2.0-or-later.
     // Adds H.264 and H.265 encoding via libx264/libx265.
-    // Requires external libs; see docs/building.md#gpl-build.
+    // Requires external libs; see docs/build/configuration.md#external-libraries.
     // NOTE: linking this binary into a closed-source product requires GPL compliance.
     gpl: {
         gpl: true,
@@ -240,7 +240,7 @@ const PRESETS = {
         filters:  [],
         extraFlags: [
             '--enable-gpl',
-            // external libs — uncomment once cross-compiled (see docs/building.md)
+            // external libs — uncomment once cross-compiled (see docs/build/from-source.md)
             // '--enable-libx264',
             // '--enable-libx265',
         ],

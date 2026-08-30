@@ -174,7 +174,8 @@ need:
 | `import { FFmpeg } from 'wasmpeg'` | Compat | You want the `load`/`writeFile`/`exec` surface and a virtual filesystem. |
 | `import { gpu } from 'wasmpeg'` | Low | You already have raw bytes or RGBA in hand and want zero-overhead `createDecoder` / `createEncoder` / `scale` with manual lifecycle control. |
 
-See [docs/api.md](docs/api.md) for the full reference, including the underlying C ABI.
+See [docs/reference/high-level.md](docs/reference/high-level.md) for the full reference,
+or [docs/reference/c-abi.md](docs/reference/c-abi.md) for the underlying C ABI.
 
 ---
 
@@ -206,7 +207,7 @@ The second number is the one that matters: it's not "does it run," it's "does it
 ## Building from source
 
 ```sh
-# one-time: install the Emscripten SDK (see docs/building.md for the pinned version)
+# one-time: install the Emscripten SDK (see docs/build/from-source.md for the pinned version)
 source ~/emsdk/emsdk_env.sh
 
 PRESET=lgpl TARGET=cpu bash scripts/build.sh   # → dist/cpu.js + dist/cpu.wasm
@@ -214,8 +215,8 @@ PRESET=gpl  TARGET=cpu bash scripts/build.sh   # → dist/gpl-cpu.js + dist/gpl-
 ```
 
 Codec selection is data-driven: presets live in [src/cli/configure.mjs](src/cli/configure.mjs),
-which generates the `./configure` flags. Full details in [docs/building.md](docs/building.md)
-and [docs/configuration.md](docs/configuration.md).
+which generates the `./configure` flags. Full details in [docs/build/from-source.md](docs/build/from-source.md)
+and [docs/build/configuration.md](docs/build/configuration.md).
 
 ---
 

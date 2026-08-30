@@ -26,7 +26,7 @@ vendor/ffmpeg         vendored FFmpeg source (the authoritative list of componen
 ## Prerequisites
 
 - **Node.js ≥ 18**
-- **Emscripten SDK** — see [docs/building.md](docs/building.md) for the pinned version
+- **Emscripten SDK** — see [docs/build/from-source.md](docs/build/from-source.md) for the pinned version
   and one-time install. `source ~/emsdk/emsdk_env.sh` must be run in each new shell
   before building.
 
@@ -63,7 +63,7 @@ support for something:
    needs its demuxer and parser.
 3. **Rebuild** and confirm with a sample file.
 
-See [docs/configuration.md](docs/configuration.md) for how presets compose.
+See [docs/build/configuration.md](docs/build/configuration.md) for how presets compose.
 
 ## Testing
 
@@ -80,7 +80,7 @@ commit (`make verify`); the last two are tracking reports run against a build.
 Always run `node tests/test.mjs` before committing — it must be green. It's a single
 framework-free file using an `ok(message, condition)` helper, grouped by layer
 (pipeline / decoder / `FFmpeg` class / `gpu`). Add assertions to the group that matches
-what you touched. See [docs/testing.md](docs/testing.md).
+what you touched. See [docs/guides/testing.md](docs/guides/testing.md).
 
 ### Compatibility and correctness (FATE)
 
