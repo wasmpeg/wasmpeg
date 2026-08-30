@@ -1,8 +1,9 @@
 # wasmpeg
 
+![npm](https://img.shields.io/npm/v/%40wasmpeg%2Fcore)
+![provenance](https://img.shields.io/badge/provenance-verified-brightgreen)
 ![License](https://img.shields.io/badge/license-LGPL--2.1--or--later-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
-![Status](https://img.shields.io/badge/status-pre--release-orange)
 
 **FFmpeg for the browser, built for the decode → display loop.** Load a video, get
 RGBA frames, scale them on the GPU, probe metadata, grab thumbnails, transcode to a
