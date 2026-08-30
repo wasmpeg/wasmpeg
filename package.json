@@ -17,6 +17,8 @@
     "src/js/",
     "dist/cpu.js",
     "dist/cpu.wasm",
+    "dist/webgpu.js",
+    "dist/webgpu.wasm",
     "LICENSE",
     "NOTICE"
   ],
