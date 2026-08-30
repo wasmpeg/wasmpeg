@@ -10,20 +10,15 @@
  *   FATE_SAMPLES=/path/to/fate-suite node tests/compat.mjs
  */
 
-import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
+import { isMainThread, parentPort, workerData } from 'node:worker_threads';
 import os   from 'node:os';
 import fs   from 'node:fs';
 import path from 'node:path';
 import { execSync, spawnSync } from 'node:child_process';
 import { EXT_FMT, PATH_FMT, EXT_VIDEO } from '../src/js/formats.js';
+import { resolvePaths, parseSamplePath, guessCodec, chunkArray, scanMakLines, runWorkers } from './lib/fate-shared.mjs';
 
-const ROOT        = path.resolve(import.meta.dirname, '..');
-const SAMPLES_DIR = process.env.FATE_SAMPLES ?? path.join(ROOT, 'fate-suite');
-const FATE_DIR    = path.join(ROOT, 'vendor/ffmpeg/tests/fate');
-const RESULTS_DIR = path.join(ROOT, 'tests/results');
-const WASM_BUILD  = process.env.WASM_BUILD ?? 'gpl-cpu';   // e.g. WASM_BUILD=cpu
-const wasmJs      = path.join(ROOT, `dist/${WASM_BUILD}.js`);
-const wasmBin     = path.join(ROOT, `dist/${WASM_BUILD}.wasm`);
+const { ROOT, SAMPLES_DIR, FATE_DIR, RESULTS_DIR, wasmJs, wasmBin } = resolvePaths(path.resolve(import.meta.dirname, '..'));
 
 // ── worker: decode a chunk of tests ──────────────────────────────────────────
 
@@ -102,12 +97,8 @@ if (!isMainThread) {
     // EXT_FMT / PATH_FMT / EXT_VIDEO are imported from ../src/js/formats.js so
     // the harness and the shipped API resolve format hints the same way.
 
-    const byCodec = {};
-
     for (const t of tests) {
         const bytes = new Uint8Array(fs.readFileSync(t.localPath));
-        byCodec[t.codec] ??= { pass: 0, total: 0, type: t.type };
-        byCodec[t.codec].total++;
 
         const ext     = t.samplePath.split('.').pop().toLowerCase();
         const fmtHint = EXT_FMT[ext]
@@ -128,11 +119,10 @@ if (!isMainThread) {
             else            decodeAudio(bytes, fmtHint);
             ok = true;
         } catch {}
-        byCodec[t.codec].pass += ok ? 1 : 0;
-        parentPort.postMessage({ type: 'tick', ok });
+        parentPort.postMessage({ type: 'tick', ok, codec: t.codec, sampleType: t.type });
     }
 
-    parentPort.postMessage({ type: 'done', byCodec });
+    parentPort.postMessage({ type: 'done' });
     process.exit(0);
 }
 
@@ -146,7 +136,6 @@ if (!fs.existsSync(wasmJs)) {
 const NO_SAVE    = process.argv.includes('--no-save');
 const FILTER_ARG = process.argv.find(a => a.startsWith('--filter='))?.split('=')[1];
 const NWORKERS   = parseInt(process.argv.find(a => a.startsWith('--workers='))?.split('=')[1])
-
                 || os.availableParallelism?.() || os.cpus().length;
 
 function classifyCmd(cmd) {
@@ -158,77 +147,18 @@ function classifyCmd(cmd) {
     return null;
 }
 
-function parseSamplePath(cmd) {
-    const m = cmd.match(/\$\(TARGET_SAMPLES\)\/([^\s)]+)/);
-    return m ? m[1] : null;
-}
-
-function guessCodec(name, samplePath) {
-    const knownCodecs = [
-        // video — modern
-        'h264','hevc','vp8','vp9','av1',
-        // video — classic / broadcast
-        'mpeg1','mpeg2','mpeg4','h263','h261',
-        // video — Microsoft
-        'wmv1','wmv2','wmv3','vc1','mss2',
-        // video — Apple / professional / Canopus (decoder=cllc)
-        'canopus','cllc','prores','dnxhd','mjpeg','qtrle','svq1','svq3','cfhd','qdm2',
-        // video — lossless / archival
-        'huffyuv','ffv1','magicyuv','lagarith','hap','utvideo',
-        // video — Bink
-        'bink',
-        // video — legacy
-        'theora','vp3','vp6','vp7','cinepak','msvideo1',
-        // images
-        'exr','psd','jpeg2000','jpegls','webp','tiff','bmp','gif','png','dpx','tga',
-        // audio — modern
-        'aac','opus','mp3','mp2','vorbis','flac',
-        // audio — surround
-        'ac3','eac3','dts','truehd','alac',
-        // audio — lossless
-        'wavpack','ape','tta','shorten',
-        // audio — Microsoft
-        'wmav','wmapro','wmalossless',
-        // audio — PCM / ADPCM
-        'pcm','adpcm','amr','speex','gsm',
-        'g722','g723','g726','sipr','nellymoser',
-        // audio — game / multimedia
-        'dpcm','atrac','wmavoice','imc','truespeech','musepack','twinvq',
-        'qcelp','ra4','ra_288','cook','dolby_e','dsf','g728',
-    ];
-    const haystack = (name + ' ' + samplePath).toLowerCase();
-    for (const c of knownCodecs) if (haystack.includes(c)) return c;
-    return 'other';
-}
-
 function loadTests() {
     const tests = [];
-    for (const mak of fs.readdirSync(FATE_DIR).filter(f => f.endsWith('.mak'))) {
-        const text  = fs.readFileSync(path.join(FATE_DIR, mak), 'utf8');
-        const lines = text.replace(/\\\n/g, ' ').split('\n');
-        let lastName = null;
-        for (const line of lines) {
-            const nm = line.match(/^(fate-[\w-]+)\s*:/);
-            if (nm) lastName = nm[1];
-            const cm = line.match(/CMD\s*=\s*(.+)/);
-            if (!cm) continue;
-            const cmd        = cm[1].trim();
-            const type       = classifyCmd(cmd);
-            const samplePath = parseSamplePath(cmd);
-            if (!type || !samplePath) continue;
-            const localPath = path.join(SAMPLES_DIR, samplePath);
-            if (!fs.existsSync(localPath)) continue;
-            if (FILTER_ARG && !samplePath.includes(FILTER_ARG) && !(lastName ?? '').includes(FILTER_ARG)) continue;
-            tests.push({ name: lastName ?? samplePath, samplePath, localPath, type, codec: guessCodec(lastName ?? '', samplePath) });
-        }
+    for (const { name, cmd } of scanMakLines(FATE_DIR)) {
+        const type       = classifyCmd(cmd);
+        const samplePath = parseSamplePath(cmd);
+        if (!type || !samplePath) continue;
+        const localPath = path.join(SAMPLES_DIR, samplePath);
+        if (!fs.existsSync(localPath)) continue;
+        if (FILTER_ARG && !samplePath.includes(FILTER_ARG) && !(name ?? '').includes(FILTER_ARG)) continue;
+        tests.push({ name: name ?? samplePath, samplePath, localPath, type, codec: guessCodec(name ?? '', samplePath) });
     }
     return tests;
-}
-
-function chunkArray(arr, n) {
-    const chunks = Array.from({ length: n }, () => []);
-    arr.forEach((item, i) => chunks[i % n].push(item));
-    return chunks.filter(c => c.length > 0);
 }
 
 // ── rsync fate-suite ──────────────────────────────────────────────────────────
@@ -245,35 +175,27 @@ const chunks = chunkArray(tests, NWORKERS);
 
 console.log(`\nfate compat — ${tests.length} tests · ${chunks.length} workers\n`);
 
-let done = 0, totalPass = 0, totalFail = 0;
+let done = 0, totalPass = 0, totalFail = 0, totalTimeout = 0;
 const byCodec = {};
 
-await new Promise((resolve, reject) => {
-    let finished = 0;
-
-    for (const chunk of chunks) {
-        const w = new Worker(new URL(import.meta.url), { workerData: { tests: chunk } });
-
-        w.on('message', msg => {
-            if (msg.type === 'tick') {
-                done++;
-                msg.ok ? totalPass++ : totalFail++;
-                process.stdout.write(`\r  ${done}/${tests.length}  (${((totalPass / done) * 100).toFixed(1)}% passing)`);
-            } else if (msg.type === 'done') {
-                for (const [codec, { pass, total, type }] of Object.entries(msg.byCodec)) {
-                    byCodec[codec] ??= { pass: 0, total: 0, type };
-                    byCodec[codec].pass  += pass;
-                    byCodec[codec].total += total;
-                }
-                if (++finished === chunks.length) resolve();
-            }
-        });
-
-        w.on('error', reject);
-    }
+await runWorkers({
+    scriptUrl: new URL(import.meta.url),
+    chunks,
+    onTick(msg) {
+        done++;
+        msg.ok ? totalPass++ : totalFail++;
+        if (msg.timeout) totalTimeout++;
+        byCodec[msg.codec] ??= { pass: 0, total: 0, type: msg.sampleType };
+        byCodec[msg.codec].total++;
+        byCodec[msg.codec].pass += msg.ok ? 1 : 0;
+        process.stdout.write(`\r  ${done}/${tests.length}  (${((totalPass / done) * 100).toFixed(1)}% passing)`);
+    },
 });
 
 process.stdout.write('\n\n');
+if (totalTimeout > 0) {
+    console.log(`  ⚠ ${totalTimeout} test(s) counted as failed — their worker stalled and was killed (no per-test timeout upstream).`);
+}
 
 // ── snapshot ──────────────────────────────────────────────────────────────────
 

@@ -18,20 +18,14 @@
  *   FATE_SAMPLES=/path/to/fate-suite node tests/fate.mjs
  */
 
-import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
+import { isMainThread, parentPort, workerData } from 'node:worker_threads';
 import os   from 'node:os';
 import fs   from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
+import { resolvePaths, parseSamplePath, guessCodec, chunkArray, scanMakLines, runWorkers } from './lib/fate-shared.mjs';
 
-const ROOT        = path.resolve(import.meta.dirname, '..');
-const SAMPLES_DIR = process.env.FATE_SAMPLES ?? path.join(ROOT, 'fate-suite');
-const FATE_DIR    = path.join(ROOT, 'vendor/ffmpeg/tests/fate');
-const REF_DIR     = path.join(ROOT, 'vendor/ffmpeg/tests/ref/fate');
-const RESULTS_DIR = path.join(ROOT, 'tests/results');
-const WASM_BUILD  = process.env.WASM_BUILD ?? 'gpl-cpu';   // e.g. WASM_BUILD=cpu
-const wasmJs      = path.join(ROOT, `dist/${WASM_BUILD}.js`);
-const wasmBin     = path.join(ROOT, `dist/${WASM_BUILD}.wasm`);
+const { ROOT, SAMPLES_DIR, FATE_DIR, REF_DIR, RESULTS_DIR, wasmJs, wasmBin } = resolvePaths(path.resolve(import.meta.dirname, '..'));
 
 // FFmpeg's framecrc muxer checksums each frame with Adler-32 seeded at 0.
 function adler32(buf) {
@@ -53,12 +47,7 @@ if (!isMainThread) {
     const mod = await factory({ wasmBinary: fs.readFileSync(wasmBin) });
     function cc(fn, ret, types, args) { return mod.ccall(fn, ret, types, args); }
 
-    const byCodec = {};
-
     for (const t of tests) {
-        byCodec[t.codec] ??= { pass: 0, total: 0 };
-        byCodec[t.codec].total++;
-
         let ok = false, detail = null;
         try {
             const bytes  = new Uint8Array(fs.readFileSync(t.localPath));
@@ -107,12 +96,11 @@ if (!isMainThread) {
             }
         } catch (e) { if (verbose) detail = `threw: ${e.message}`; }
 
-        byCodec[t.codec].pass += ok ? 1 : 0;
-        parentPort.postMessage({ type: 'tick', ok, name: verbose ? t.name : undefined,
+        parentPort.postMessage({ type: 'tick', ok, codec: t.codec, name: verbose ? t.name : undefined,
                                  samplePath: verbose ? t.samplePath : undefined, detail });
     }
 
-    parentPort.postMessage({ type: 'done', byCodec });
+    parentPort.postMessage({ type: 'done' });
     process.exit(0);
 }
 
@@ -156,11 +144,6 @@ const TRANSFORM_FLAGS = new Set([
     '-fps_mode', '-sws_flags', '-pixel_format', '-video_size', '-stride',
 ]);
 
-function parseSamplePath(cmd) {
-    const m = cmd.match(/\$\(TARGET_SAMPLES\)\/([^\s)]+)/);
-    return m ? m[1] : null;
-}
-
 function isPureDecode(cmd) {
     for (let tok of cmd.trim().split(/\s+/)) {
         if (!tok.startsWith('-')) continue;
@@ -194,55 +177,27 @@ function refInfo(refName) {
     return crcs;
 }
 
-function guessCodec(name, samplePath) {
-    const known = [
-        'h264','hevc','vp8','vp9','av1','mpeg1','mpeg2','mpeg4','h263','h261',
-        'wmv1','wmv2','wmv3','vc1','mss2','prores','dnxhd','mjpeg','qtrle','svq1','svq3','cfhd',
-        'huffyuv','ffv1','magicyuv','lagarith','hap','utvideo','bink','cllc','canopus',
-        'theora','vp3','vp6','vp7','cinepak','msvideo1','indeo','loco','msrle','dv',
-        'exr','psd','jpeg2000','jpegls','webp','tiff','bmp','gif','png','dpx','tga',
-        'fraps','cdxl','flic','zmbv','speedhq','qoi','avif',
-    ];
-    const hay = (name + ' ' + samplePath).toLowerCase();
-    for (const c of known) if (hay.includes(c)) return c;
-    return 'other';
-}
-
 function loadTests() {
     const tests = [];
-    for (const mak of fs.readdirSync(FATE_DIR).filter(f => f.endsWith('.mak'))) {
-        const text  = fs.readFileSync(path.join(FATE_DIR, mak), 'utf8').replace(/\\\n/g, ' ');
-        let lastName = null;
-        for (const line of text.split('\n')) {
-            const nm = line.match(/^(fate-[\w-]+)\s*:/);
-            if (nm) lastName = nm[1];
-            const cm = line.match(/CMD\s*=\s*(.+)/);
-            if (!cm || !lastName) continue;
-            const cmd = cm[1].trim();
-            if (cmd.split(/\s+/)[0] !== 'framecrc') continue;
-            if (lastName.startsWith('fate-filter-')) continue;   // filtergraph tests aren't pure decode
-            if (!isPureDecode(cmd)) continue;
+    for (const { name, cmd } of scanMakLines(FATE_DIR)) {
+        if (!name) continue;
+        if (cmd.split(/\s+/)[0] !== 'framecrc') continue;
+        if (name.startsWith('fate-filter-')) continue;   // filtergraph tests aren't pure decode
+        if (!isPureDecode(cmd)) continue;
 
-            const samplePath = parseSamplePath(cmd);
-            if (!samplePath) continue;
-            const localPath = path.join(SAMPLES_DIR, samplePath);
-            if (!fs.existsSync(localPath)) continue;
+        const samplePath = parseSamplePath(cmd);
+        if (!samplePath) continue;
+        const localPath = path.join(SAMPLES_DIR, samplePath);
+        if (!fs.existsSync(localPath)) continue;
 
-            const crcs = refInfo(lastName.replace(/^fate-/, ''));
-            if (!crcs) continue;
+        const crcs = refInfo(name.replace(/^fate-/, ''));
+        if (!crcs) continue;
 
-            if (FILTER_ARG && !samplePath.includes(FILTER_ARG) && !lastName.includes(FILTER_ARG)) continue;
+        if (FILTER_ARG && !samplePath.includes(FILTER_ARG) && !name.includes(FILTER_ARG)) continue;
 
-            tests.push({ name: lastName, localPath, samplePath, crcs, codec: guessCodec(lastName, samplePath) });
-        }
+        tests.push({ name, localPath, samplePath, crcs, codec: guessCodec(name, samplePath) });
     }
     return tests;
-}
-
-function chunkArray(arr, n) {
-    const chunks = Array.from({ length: n }, () => []);
-    arr.forEach((item, i) => chunks[i % n].push(item));
-    return chunks.filter(c => c.length > 0);
 }
 
 const tests = loadTests();
@@ -256,38 +211,35 @@ const chunks = chunkArray(tests, VERBOSE ? 1 : NWORKERS);
 
 console.log(`\nfate correctness — ${tests.length} pure-decode video tests · ${chunks.length} workers\n`);
 
-let done = 0, totalPass = 0, totalFail = 0;
+let done = 0, totalPass = 0, totalFail = 0, totalTimeout = 0;
 const byCodec = {};
 
-await new Promise((resolve, reject) => {
-    let finished = 0;
-    for (const chunk of chunks) {
-        const w = new Worker(new URL(import.meta.url), { workerData: { tests: chunk, verbose: VERBOSE } });
-        w.on('message', msg => {
-            if (msg.type === 'tick') {
-                done++;
-                msg.ok ? totalPass++ : totalFail++;
-                if (VERBOSE) {
-                    console.log(`${msg.ok ? 'PASS' : 'FAIL'}  ${msg.name}`);
-                    console.log(`      sample: ${msg.samplePath}`);
-                    if (msg.detail) console.log(`      ${msg.detail}`);
-                } else {
-                    process.stdout.write(`\r  ${done}/${tests.length}  (${((totalPass / done) * 100).toFixed(1)}% correct)`);
-                }
-            } else if (msg.type === 'done') {
-                for (const [codec, { pass, total }] of Object.entries(msg.byCodec)) {
-                    byCodec[codec] ??= { pass: 0, total: 0 };
-                    byCodec[codec].pass  += pass;
-                    byCodec[codec].total += total;
-                }
-                if (++finished === chunks.length) resolve();
-            }
-        });
-        w.on('error', reject);
-    }
+await runWorkers({
+    scriptUrl: new URL(import.meta.url),
+    chunks,
+    extraData: { verbose: VERBOSE },
+    onTick(msg) {
+        done++;
+        msg.ok ? totalPass++ : totalFail++;
+        if (msg.timeout) totalTimeout++;
+        byCodec[msg.codec] ??= { pass: 0, total: 0 };
+        byCodec[msg.codec].total++;
+        byCodec[msg.codec].pass += msg.ok ? 1 : 0;
+        if (VERBOSE) {
+            const label = msg.timeout ? 'TIMEOUT' : (msg.ok ? 'PASS' : 'FAIL');
+            console.log(`${label}  ${msg.name ?? '(unknown — worker timed out)'}`);
+            if (msg.samplePath) console.log(`      sample: ${msg.samplePath}`);
+            if (msg.detail) console.log(`      ${msg.detail}`);
+        } else {
+            process.stdout.write(`\r  ${done}/${tests.length}  (${((totalPass / done) * 100).toFixed(1)}% correct)`);
+        }
+    },
 });
 
 process.stdout.write('\n\n');
+if (totalTimeout > 0) {
+    console.log(`  ⚠ ${totalTimeout} test(s) counted as failed — their worker stalled and was killed (no per-test timeout upstream).`);
+}
 
 // ── snapshot ──────────────────────────────────────────────────────────────────
 
