@@ -3,11 +3,14 @@ title: "WebGPU (experimental)"
 description: "How GPU-accelerated scaling works, what's wired up today, and the honest state of WebGPU support."
 weight: 60
 ---
-{{< aside type="caution" title="Experimental" >}}
-WebGPU support is **scaffolded end-to-end but lightly validated.** The plumbing exists
-and compiles, but it relies on a custom FFmpeg WebGPU hardware context, the prebuilt
-WebGPU binary isn't part of the default test run, and only one GPU filter is wired up.
-Treat it as experimental — the CPU path is the supported default.
+{{< aside type="caution" title="Experimental — known broken on a real adapter" >}}
+WebGPU support is **scaffolded end-to-end but not working with a real GPU adapter today.**
+The plumbing exists and compiles, but device creation inside `pipeline_run_rgba_gpu` /
+`gpu_session_open` is async under the hood, and under `ASYNCIFY` that makes the JS layer
+return a `Promise` where the API is documented and used as synchronous — so `gpu.scale()`
+throws on its first real call once an adapter is present. This was invisible in testing
+because Node has no adapter and the path never ran. Treat this page as a description of
+the intended design, not a working feature yet — the CPU path is the supported default.
 {{< /aside >}}
 
 ## What it does
@@ -56,27 +59,38 @@ build stays the default even on machines that have a GPU.
 
 ## Current limitations
 
+- **Breaks on a real adapter.** Verified in headless Chromium with a real WebGPU adapter
+  present: `gpu.scale()` and `gpu.benchGpu()` throw on their first call.
+  `av_hwdevice_ctx_create`'s async adapter/device request makes the WASM call yield under
+  `ASYNCIFY`, so the JS wrapper gets back a `Promise` instead of the number it expects —
+  and every wrapper in `src/js/gpu.js` treats the ccall result as synchronous. This is the
+  actual current state of the GPU scale path, not a theoretical gap.
 - **One filter.** Only `scale_webgpu` is GPU-accelerated. Every other filter runs on the
   CPU.
 - **Custom FFmpeg.** The build pulls in `libavutil/hwcontext_webgpu.h`, which is **not**
   in mainline FFmpeg — the vendored tree carries a WebGPU hardware-context patch.
 - **Not in the default test run.** Node has no WebGPU adapter, so the GPU path is skipped
-  in `tests/test.mjs` and the FATE harnesses default to the CPU build. Validating it means
-  building `webgpu.wasm` and exercising it in a real browser.
+  in `tests/test.mjs` and the FATE harnesses default to the CPU build. That gap is exactly
+  why the bug above went unnoticed — it only shows up with a real adapter.
 
 ## Benchmarking
 
 `tests/bench.html` runs the GPU and CPU scale paths side by side in a browser. From code:
 
 ```js
-gpu.benchGpu(1920, 1080, 1280, 720, 50);  // ms/frame on the GPU build
+gpu.benchGpu(1920, 1080, 1280, 720, 50);  // ms/frame on the CPU build; currently
+                                           // throws instead of returning a number
+                                           // wherever a real GPU adapter exists — see
+                                           // "Current limitations" above
 gpu.benchCpu(1920, 1080, 1280, 720, 50);  // ms/frame on the CPU
 ```
 
-`benchGpu` returns `-1` on the CPU build.
+`benchGpu` returns `-1` on the CPU build (no adapter, no attempt made). On a build with a
+real adapter it currently throws rather than benchmarking anything.
 
 ## Should you use it?
 
-For production, prefer the CPU build — it's SIMD-accelerated, fully tested, and loads
-without ASYNCIFY overhead. Reach for the WebGPU build when you're scaling large frames in
-a tight loop in a browser you control and can verify the output yourself.
+Not yet, for the GPU path specifically — see "Current limitations" above. Use the CPU
+build: it's SIMD-accelerated, fully tested, and loads without ASYNCIFY overhead. The
+WebGPU build is worth watching, not depending on, until the async-device-creation issue
+has a fix.
