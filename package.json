@@ -34,6 +34,9 @@
     "type": "git",
     "url": "https://github.com/wasmpeg/wasmpeg.git"
   },
+  "homepage": "https://wasmpeg.com",
+  "bugs": "https://github.com/wasmpeg/wasmpeg/issues",
+  "author": "wasmpeg <hello@wasmpeg.com>",
   "keywords": [
     "ffmpeg",
     "wasm",
