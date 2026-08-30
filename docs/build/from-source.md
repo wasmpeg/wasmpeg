@@ -9,7 +9,9 @@ produce the GPL `wasmpeg-full` binaries. The npm package ships prebuilt `dist/*.
 ## Prerequisites
 
 - **Node.js** ≥ 18
-- **Emscripten SDK (emsdk)** — see the pinned version in the repo's build docs.
+- **Emscripten SDK (emsdk)** — pinned to **6.0.8** (matches CI; see
+  [a note on emsdk versions](#a-note-on-emsdk-versions) for why `latest` isn't safe to
+  assume and older 3.1.x releases won't build the WebGPU target).
 
 {{< steps >}}
 {{% step %}}
@@ -18,7 +20,7 @@ Install emsdk once:
    ```sh
    git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
    cd ~/emsdk
-   ./emsdk install latest && ./emsdk activate latest
+   ./emsdk install 6.0.8 && ./emsdk activate 6.0.8
    ```
 {{% /step %}}
 {{% step %}}
@@ -29,6 +31,23 @@ Activate it in **every** new shell before building (it doesn't persist):
    ```
 {{% /step %}}
 {{< /steps >}}
+
+### A note on emsdk versions
+
+Two real, version-specific gotchas, both worth knowing if you're pinning a different
+emsdk yourself:
+
+- **3.1.64 through at least 3.1.74 ship a broken `wasm-opt`/LLD pairing.** `emcc` still
+  passes `--enable-bulk-memory-opt` to `wasm-opt`'s post-link optimization pass, but the
+  bundled `wasm-opt` no longer recognizes that flag. For the CPU target this is silently
+  non-fatal — you get a working but unoptimized, larger `.wasm` — but FFmpeg's own
+  `./configure` sanity-checks the compiler the same way, and *there* the failure is fatal.
+  6.0.8 has this fixed.
+- **`--use-port=emdawnwebgpu` doesn't exist at all in the 3.1.x series** — it's a
+  considerably newer addition, tracking Dawn's own emscripten packaging. Once it's
+  available, it also requires C++ linkage even for a trivial C sanity-check compile —
+  hence `-s DEFAULT_TO_CXX=1` on both the `configure.mjs`-generated `--extra-ldflags` and
+  the final `emcc src/pipeline.c` link in `scripts/build.sh` for the `webgpu` target.
 
 ## Build
 

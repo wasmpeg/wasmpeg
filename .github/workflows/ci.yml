@@ -77,7 +77,7 @@ jobs:
       # node's own install otherwise (emsdk-main/node/<ver>/bin/node)
       - uses: mymindstorm/setup-emsdk@v14
         with:
-          version: 3.1.64
+          version: 6.0.8
           actions-cache-folder: emsdk-cache
 
       - uses: actions/setup-node@v4

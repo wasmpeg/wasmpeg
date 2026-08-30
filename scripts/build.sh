@@ -61,6 +61,7 @@ build_target() {
             -lavfilter -lavcodec -lavformat -lavutil -lswscale -lswresample \
             --use-port=emdawnwebgpu \
             -s WASM=1 \
+            -s DEFAULT_TO_CXX=1 \
             -s ASYNCIFY \
             -s MODULARIZE=1 \
             -s EXPORT_ES6=1 \

@@ -430,8 +430,10 @@ async function main() {
         const extraCflags  = webgpu
             ? '-O3 -msimd128 --use-port=emdawnwebgpu --use-port=zlib'
             : '-O3 -msimd128 --use-port=zlib';
+        // emdawnwebgpu is a C++ port — even configure's own trivial C sanity-check
+        // link fails without DEFAULT_TO_CXX once the port is on the link line.
         const extraLdflags = webgpu
-            ? '-O3 --use-port=zlib --use-port=emdawnwebgpu -s ASYNCIFY -s INITIAL_MEMORY=67108864'
+            ? '-O3 --use-port=zlib --use-port=emdawnwebgpu -s ASYNCIFY -s INITIAL_MEMORY=67108864 -s DEFAULT_TO_CXX=1'
             : '-O3 --use-port=zlib';
 
         const content = [
