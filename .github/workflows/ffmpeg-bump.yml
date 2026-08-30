@@ -15,6 +15,7 @@ jobs:
     outputs:
       tag: ${{ steps.check.outputs.tag }}
       needed: ${{ steps.check.outputs.needed }}
+      major-bump: ${{ steps.check.outputs.major-bump }}
     steps:
       - uses: actions/checkout@v4
 
@@ -34,6 +35,13 @@ jobs:
           else
             echo "needed=true" >> "$GITHUB_OUTPUT"
             echo "tag=n$latest" >> "$GITHUB_OUTPUT"
+            current_major="${current%%.*}"
+            latest_major="${latest%%.*}"
+            if [ "$current_major" != "$latest_major" ]; then
+              echo "major-bump=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "major-bump=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
   bump:
@@ -51,6 +59,20 @@ jobs:
 
       - name: bump vendor/ffmpeg
         run: bash scripts/bump-ffmpeg.sh ${{ needs.check.outputs.tag }} || true
+
+      - name: bump package.json version
+        env:
+          MAJOR_BUMP: ${{ needs.check.outputs.major-bump }}
+        run: |
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const [major, minor] = p.version.split('.').map(Number);
+            p.version = process.env.MAJOR_BUMP === 'true'
+              ? \`\${major + 1}.0.0\`
+              : \`\${major}.\${minor + 1}.0\`;
+            fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          "
 
       - name: finalize commit
         run: |
