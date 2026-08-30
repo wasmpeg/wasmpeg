@@ -47,6 +47,8 @@ The WebGPU target differs from the CPU build in three ways (all handled by
 It produces `dist/webgpu.js` + `dist/webgpu.wasm`, which the loaders select when
 `navigator.gpu` exists. The configurator also appends `--enable-webgpu` and
 `--enable-filter=scale_webgpu` to the FFmpeg configure flags for this target only.
+This is the same binary shipped in [`@wasmpeg/core`](/docs/start/installation/#which-package)
+on npm — you don't need to build it yourself to try it.
 
 One consequence of `ASYNCIFY`: the WebGPU module's calls are async under the hood, which
 adds some code size and call overhead the CPU build doesn't pay. That's part of why the CPU
