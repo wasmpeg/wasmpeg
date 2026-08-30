@@ -29,6 +29,18 @@ const bytes = await wasmpeg.encode(input, options?);
 to the encoder. For raw pixels (`canvas`, `HTMLVideoElement`, `ImageData`) it skips
 decoding and encodes the pixels straight through — exactly one frame.
 
+A frame you already decoded works too — `dec.nextFrame()`'s `Uint8ClampedArray` is the
+same shape `ImageData.data` is, just without the DOM object around it, so it needs
+`width`/`height` passed explicitly instead of reading them off the wrapper:
+
+```js
+const frame = dec.nextFrame();
+const jpg = await wasmpeg.encode(frame, { width: dec.width, height: dec.height });
+```
+
+This is the one raw-pixel path that also works in Node — `canvas`/`ImageData`/
+`HTMLVideoElement` are browser-only, since Node has no DOM to produce them from.
+
 By default it encodes with the `mjpeg` codec into the `image2pipe` muxer, which writes a
 single stream to wasmpeg's in-memory IO. The result is the full container as a
 `Uint8Array`, ready to wrap in a `Blob`.
@@ -45,8 +57,8 @@ size; set them to resize while encoding.
 |-------|------|---------|-------------|
 | `codec` | string | `'mjpeg'` | Encoder name — `'mjpeg'`, `'png'`, `'gif'`, `'bmp'`, `'tiff'`, … |
 | `fmt` | string | `'image2pipe'` | Container / muxer. The default pipe muxer writes a single stream to in-memory IO. |
-| `width` | number | source width | Output width in pixels. |
-| `height` | number | source height | Output height in pixels. |
+| `width` | number | source width | Output width in pixels. **Required** when `input` is a raw `Uint8ClampedArray` frame — there's no container to read it from. |
+| `height` | number | source height | Output height in pixels. **Required** when `input` is a raw `Uint8ClampedArray` frame. |
 | `fps` | number \| `{num,den}` | `30` | Frame rate used for output timestamps. |
 | `bitrate` | number | `0` | Target bitrate in bits/s (`0` = codec default). |
 | `frames` | number | all | Maximum number of frames to encode. |
