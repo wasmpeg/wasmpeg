@@ -1,6 +1,6 @@
 {
   "name": "@wasmpeg/core",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "WebGPU-accelerated FFmpeg compiled to WebAssembly",
   "license": "LGPL-2.1-or-later",
   "type": "module",
