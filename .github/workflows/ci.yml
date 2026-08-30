@@ -16,7 +16,7 @@ jobs:
       !contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -41,9 +41,9 @@ jobs:
       !contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -71,16 +71,16 @@ jobs:
        contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump'))
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # setup-emsdk must run before setup-node — its PATH entry shadows
       # node's own install otherwise (emsdk-main/node/<ver>/bin/node)
-      - uses: mymindstorm/setup-emsdk@v14
+      - uses: mymindstorm/setup-emsdk@v16
         with:
           version: 6.0.8
           actions-cache-folder: emsdk-cache
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -99,7 +99,7 @@ jobs:
   #      contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump'))
   #   runs-on: [self-hosted, fate]
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v7
   #
   #     - run: rsync -a rsync://fate-suite.ffmpeg.org/fate-suite/ fate-suite/
   #
