@@ -224,7 +224,7 @@ const PRESETS = {
         desc: 'wasmpeg — comprehensive LGPL build, safe for commercial use',
     },
 
-    // wasmpeg-full — GPL-2.0-or-later.
+    // gpl preset — GPL-2.0-or-later, not published to npm.
     // Adds H.264 and H.265 encoding via libx264/libx265.
     // Requires external libs; see docs/build/configuration.md#external-libraries.
     // NOTE: linking this binary into a closed-source product requires GPL compliance.
@@ -248,7 +248,7 @@ const PRESETS = {
             // 'libx264',
             // 'libx265',
         ],
-        desc: 'wasmpeg-full — GPL build, adds H.264/H.265 encode (libx264/libx265)',
+        desc: 'gpl — GPL build, adds H.264/H.265 encode (libx264/libx265), not published to npm',
     },
 
     // Fast iteration — keep for dev speed
