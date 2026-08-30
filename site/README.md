@@ -1,4 +1,4 @@
-# wasmpeg.dev
+# wasmpeg.com
 
 The wasmpeg documentation site — [Hugo](https://gohugo.io) (extended), no npm dependencies.
 

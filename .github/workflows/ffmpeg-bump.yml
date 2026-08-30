@@ -47,7 +47,7 @@ jobs:
 
       - run: |
           git config user.name "wasmpeg-bot"
-          git config user.email "bot@wasmpeg.dev"
+          git config user.email "bot@wasmpeg.com"
 
       - name: bump vendor/ffmpeg
         run: bash scripts/bump-ffmpeg.sh ${{ needs.check.outputs.tag }} || true
