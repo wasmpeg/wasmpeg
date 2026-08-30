@@ -94,6 +94,27 @@ function allocBytes(buf) {
     return ptr;
 }
 
+// pipeline_run_rgba_gpu / gpu_session_open / bench_scale_webgpu* create a
+// WebGPU device under the hood, which is inherently async. Under ASYNCIFY, a
+// wasm call that yields makes its ccall wrapper return a Promise instead of
+// its declared number — every caller here still treats the result as
+// synchronous, so a raw Promise would otherwise sail past a `< 0` check
+// (always false) and get used as a handle/return value, surfacing as a
+// baffling downstream failure instead of pointing at the real cause. This is
+// a guard, not a fix: the real fix needs either an async GPU-path API or a
+// synchronous device-warm step on the C side.
+function assertSyncResult(value, fnName) {
+    if (value instanceof Promise) {
+        throw new Error(
+            `${fnName}() returned a Promise instead of a number — WebGPU device ` +
+            `creation is async under ASYNCIFY and this call path expects a ` +
+            `synchronous result. The GPU scale path does not work yet with a ` +
+            `real WebGPU adapter present; use the CPU build/fallback instead.`
+        );
+    }
+    return value;
+}
+
 /* ── persistent GPU session ──────────────────────────────────────────────── */
 
 /**
@@ -112,8 +133,8 @@ function createGpuSession({ srcW, srcH, dstW, dstH, filtergraph } = {}) {
     if (!srcW || !srcH || !dstW || !dstH) throw new Error('createGpuSession: sizes are required');
 
     const fg = filtergraph ?? `scale_webgpu=${dstW}:${dstH}`;
-    const handle = _mod.ccall('gpu_session_open', 'number',
-        ['number','number','number','number','string'], [srcW, srcH, dstW, dstH, fg]);
+    const handle = assertSyncResult(_mod.ccall('gpu_session_open', 'number',
+        ['number','number','number','number','string'], [srcW, srcH, dstW, dstH, fg]), 'gpu_session_open');
     if (handle < 0) throw new Error(`gpu_session_open failed: ${handle}`);
 
     const srcBytes = srcW * srcH * 4;
@@ -127,8 +148,8 @@ function createGpuSession({ srcW, srcH, dstW, dstH, filtergraph } = {}) {
         run(rgba) {
             if (closed) throw new Error('gpu session is closed');
             _mod.HEAPU8.set(rgba, srcPtr);
-            const ret = _mod.ccall('gpu_session_run', 'number',
-                ['number','number','number'], [handle, srcPtr, dstPtr]);
+            const ret = assertSyncResult(_mod.ccall('gpu_session_run', 'number',
+                ['number','number','number'], [handle, srcPtr, dstPtr]), 'gpu_session_run');
             if (ret !== 0) throw new Error(`gpu_session_run failed: ${ret}`);
             return new Uint8ClampedArray(_mod.HEAPU8.buffer, dstPtr, dstBytes).slice();
         },
@@ -178,9 +199,9 @@ function scale(srcRgba, srcW, srcH, dstW, dstH, filtergraph) {
     // Free in a finally: an abort inside the filtergraph would otherwise leak
     // both buffers, and a filter op is easy to call in a loop.
     try {
-        const ret = _mod.ccall(fn, 'number',
+        const ret = assertSyncResult(_mod.ccall(fn, 'number',
             ['number','number','number','number','number','number','string'],
-            [srcPtr, srcW, srcH, dstPtr, dstW, dstH, fg]);
+            [srcPtr, srcW, srcH, dstPtr, dstW, dstH, fg]), fn);
         if (ret !== 0) throw new Error(`scale failed: ${ret}`);
         return new Uint8ClampedArray(_mod.HEAPU8.buffer, dstPtr, dstW * dstH * 4).slice();
     } finally {
@@ -399,14 +420,14 @@ function hasWebGPU() { return _hasGPU; }
 
 function benchGpu(srcW, srcH, dstW, dstH, iters) {
     assertLoaded();
-    return _mod.ccall('bench_scale_webgpu', 'number',
-        ['number','number','number','number','number'], [srcW, srcH, dstW, dstH, iters]);
+    return assertSyncResult(_mod.ccall('bench_scale_webgpu', 'number',
+        ['number','number','number','number','number'], [srcW, srcH, dstW, dstH, iters]), 'bench_scale_webgpu');
 }
 
 function benchGpuSession(srcW, srcH, dstW, dstH, iters) {
     assertLoaded();
-    return _mod.ccall('bench_scale_webgpu_session', 'number',
-        ['number','number','number','number','number'], [srcW, srcH, dstW, dstH, iters]);
+    return assertSyncResult(_mod.ccall('bench_scale_webgpu_session', 'number',
+        ['number','number','number','number','number'], [srcW, srcH, dstW, dstH, iters]), 'bench_scale_webgpu_session');
 }
 
 function benchCpu(srcW, srcH, dstW, dstH, iters) {
