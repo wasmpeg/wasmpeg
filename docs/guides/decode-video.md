@@ -62,7 +62,7 @@ that matters.
 Load the module once, at startup.
 
    ```js
-   import wasmpeg from 'wasmpeg';
+   import wasmpeg from '@wasmpeg/core';
    await wasmpeg.load();
    ```
 {{% /step %}}

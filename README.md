@@ -10,7 +10,7 @@ handful of common formats — from a 3.2 MB gzipped WASM, with **no SharedArrayB
 and no COOP/COEP headers** required.
 
 ```js
-import wasmpeg from 'wasmpeg';
+import wasmpeg from '@wasmpeg/core';
 
 await wasmpeg.load();
 
@@ -36,16 +36,13 @@ in [wasmpeg-tracking](https://github.com/wasmpeg/wasmpeg-tracking).
 
 ## Install
 
-Not on npm yet. Until the first release, install from git and build once:
-
 ```sh
-git clone https://github.com/wasmpeg/wasmpeg
-cd wasmpeg && bash scripts/build.sh   # needs the Emscripten SDK
+npm install @wasmpeg/core
 ```
 
-The published packages will be `wasmpeg` (LGPL, safe for commercial and
-closed-source use) and `wasmpeg-full` (GPL, adds H.264/H.265 encode via
-libx264/libx265).
+`@wasmpeg/core` ships both the CPU and WebGPU binaries (LGPL). If you only need the
+CPU path — server-side, or a bundle-size-sensitive browser build — `@wasmpeg/cpu` is
+the same package without the WebGPU binary, roughly half the download.
 
 No special server headers and no worker setup are required at runtime.
 
@@ -59,7 +56,7 @@ The default export is the **high-level API**. Every method accepts any input typ
 management for you.
 
 ```js
-import wasmpeg from 'wasmpeg';
+import wasmpeg from '@wasmpeg/core';
 await wasmpeg.load();
 ```
 
@@ -140,7 +137,7 @@ Alongside the high-level API, wasmpeg ships an `FFmpeg` class with a load /
 virtual-filesystem / event surface:
 
 ```js
-import { FFmpeg } from 'wasmpeg';
+import { FFmpeg } from '@wasmpeg/core';
 
 const ff = new FFmpeg();
 ff.on('log', ({ message }) => console.log(message));
@@ -170,9 +167,9 @@ need:
 
 | Import | Level | Use when |
 |--------|-------|----------|
-| `import wasmpeg from 'wasmpeg'` | High | You have a `File`/`Blob`/`URL`/canvas and want frames, audio, metadata, or a thumbnail. **Start here.** |
-| `import { FFmpeg } from 'wasmpeg'` | Compat | You want the `load`/`writeFile`/`exec` surface and a virtual filesystem. |
-| `import { gpu } from 'wasmpeg'` | Low | You already have raw bytes or RGBA in hand and want zero-overhead `createDecoder` / `createEncoder` / `scale` with manual lifecycle control. |
+| `import wasmpeg from '@wasmpeg/core'` | High | You have a `File`/`Blob`/`URL`/canvas and want frames, audio, metadata, or a thumbnail. **Start here.** |
+| `import { FFmpeg } from '@wasmpeg/core'` | Compat | You want the `load`/`writeFile`/`exec` surface and a virtual filesystem. |
+| `import { gpu } from '@wasmpeg/core'` | Low | You already have raw bytes or RGBA in hand and want zero-overhead `createDecoder` / `createEncoder` / `scale` with manual lifecycle control. |
 
 See [docs/reference/high-level.md](docs/reference/high-level.md) for the full reference,
 or [docs/reference/c-abi.md](docs/reference/c-abi.md) for the underlying C ABI.
@@ -189,7 +186,7 @@ per-codec breakdown lives in [COMPAT.md](COMPAT.md). The main formats:
 | **Video decode** | H.264, H.265/HEVC, VP8/9, AV1, MPEG-1/2/4, H.263, VC-1, WMV1/2/3, ProRes, DNxHD, Theora, VP3/6/7, Cinepak, and more |
 | **Audio decode** | AAC, Opus, MP3, Vorbis, FLAC, AC-3, E-AC-3, DTS, TrueHD, ALAC, WMA, WavPack, and more |
 | **Image** | PNG, JPEG, JPEG-2000, WebP, TIFF, BMP, GIF, EXR, PSD, DPX, TGA |
-| **Video encode** | MJPEG, PNG, GIF, BMP, TIFF, HuffYUV, FFV1 — plus **H.264/H.265** in `wasmpeg-full` |
+| **Video encode** | MJPEG, PNG, GIF, BMP, TIFF, HuffYUV, FFV1 — H.264/H.265 encode is GPL-only and not yet published |
 | **Audio encode** | AAC, Opus, FLAC, MP2, WavPack, PCM variants |
 | **Containers** | MP4, MKV, WebM, AVI, OGG, MPEG-TS, FLV, ASF, WAV, FLAC, and more |
 
@@ -229,11 +226,13 @@ test workflow, and the DCO sign-off requirement.
 
 ## License
 
-`wasmpeg` is **LGPL-2.1-or-later** — usable in commercial and closed-source products
-under the LGPL (ship the WASM as a user-replaceable, separately-linkable artifact).
+`@wasmpeg/core` and `@wasmpeg/cpu` are both **LGPL-2.1-or-later** — usable in
+commercial and closed-source products under the LGPL (ship the WASM as a
+user-replaceable, separately-linkable artifact).
 
-`wasmpeg-full` is **GPL-2.0-or-later** because it links libx264 and libx265.
-Embedding it in a closed-source product requires full GPL compliance.
+A GPL package adding H.264/H.265 encode via libx264/libx265 isn't published yet —
+embedding that in a closed-source product will require full GPL compliance once it
+ships.
 
 FFmpeg is copyright its respective authors. H.264/H.265 patent rights are held by
 MPEG-LA and Access Advance; licensing is the end user's responsibility. Not

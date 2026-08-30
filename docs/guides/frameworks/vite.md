@@ -11,7 +11,7 @@ app — vanilla, React, Vue, or Svelte.
 ## Install
 
 ```sh
-npm install wasmpeg
+npm install @wasmpeg/core
 ```
 
 wasmpeg is ESM-only, which is exactly what Vite expects, so there's nothing to configure in

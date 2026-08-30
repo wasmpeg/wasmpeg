@@ -15,14 +15,14 @@ The project must be ESM, since wasmpeg ships ESM only. Set `"type": "module"` in
    `package.json`, or give your entry file an `.mjs` extension. Then install:
 
    ```sh
-   npm install wasmpeg
+   npm install @wasmpeg/core
    ```
 {{% /step %}}
 {{% step %}}
 Probe and decode a file. Read it off disk into a `Uint8Array` and hand that to wasmpeg:
 
    ```js
-   import wasmpeg from 'wasmpeg';
+   import wasmpeg from '@wasmpeg/core';
    import { readFile } from 'node:fs/promises';
 
    await wasmpeg.load();

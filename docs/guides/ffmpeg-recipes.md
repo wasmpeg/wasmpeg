@@ -413,7 +413,7 @@ there's no output-container/transcode path.
 | `ffmpeg -i in.mp4 -r 24 …` | No frame-rate conversion. |
 | `ffmpeg -i a.mp4 -i b.mp4 -filter_complex concat …` | Single input only; no multi-input / `-filter_complex`. |
 | `ffmpeg -i v.mp4 -i a.mp3 -c copy out.mp4` | No audio+video muxing. |
-| `ffmpeg -i in.mov -c:v libx264 out.mp4` | H.264/H.265 **encode** is GPL-only (`wasmpeg-full`); even there, output is per-frame, not a muxed file. |
+| `ffmpeg -i in.mov -c:v libx264 out.mp4` | H.264/H.265 **encode** is GPL-only and not published to npm yet; even there, output is per-frame, not a muxed file. |
 
 For multi-frame or image output, push frames through
 [`gpu.createEncoder`](/docs/reference/gpu/#createencoder) yourself. For full

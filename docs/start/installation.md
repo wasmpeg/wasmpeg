@@ -14,27 +14,27 @@ SharedArrayBuffer, no COOP/COEP headers, and no worker setup** are required.
 
    {{< tabs >}}
 {{< tab label="npm" group="tabgroup-0" first="true" >}}
-<pre><code>npm install wasmpeg</code></pre>
+<pre><code>npm install @wasmpeg/core</code></pre>
 {{< /tab >}}
 {{< tab label="pnpm" group="tabgroup-0" >}}
-<pre><code>pnpm add wasmpeg</code></pre>
+<pre><code>pnpm add @wasmpeg/core</code></pre>
 {{< /tab >}}
 {{< tab label="yarn" group="tabgroup-0" >}}
-<pre><code>yarn add wasmpeg</code></pre>
+<pre><code>yarn add @wasmpeg/core</code></pre>
 {{< /tab >}}
 {{< tab label="bun" group="tabgroup-0" >}}
-<pre><code>bun add wasmpeg</code></pre>
+<pre><code>bun add @wasmpeg/core</code></pre>
 {{< /tab >}}
 {{< /tabs >}}
 
-   Use `wasmpeg-full` instead if you need H.264/H.265 **encode** (GPL) — see
-   [which package](#which-package).
+   Need a smaller download and don't care about WebGPU (e.g. server-side)? Use
+   `@wasmpeg/cpu` instead — see [which package](#which-package).
 {{% /step %}}
 {{% step %}}
 **Import it and load the module once.**
 
    ```js
-   import wasmpeg from 'wasmpeg';
+   import wasmpeg from '@wasmpeg/core';
 
    await wasmpeg.load();
    ```
@@ -60,23 +60,26 @@ scale, probe, audio, and thumbnails.
 ## Which package
 
 {{< cardgrid >}}
-{{< cardgrid >}}
-{{< linkcard title="wasmpeg (LGPL)" href="#quick-install" description="LGPL-2.1-or-later. Safe for commercial and closed-source. Includes H.264/H.265 decode. What most projects want." >}}
-{{< linkcard title="wasmpeg-full (GPL)" href="#quick-install" description="GPL-2.0-or-later. Adds H.264/H.265 encode via libx264/libx265. Requires GPL compliance to embed." >}}
-{{< /cardgrid >}}
+{{< linkcard title="@wasmpeg/core" href="#quick-install" description="LGPL-2.1-or-later. CPU and WebGPU binaries both included. What most projects want." >}}
+{{< linkcard title="@wasmpeg/cpu" href="#quick-install" description="LGPL-2.1-or-later. CPU only, no WebGPU binary — smaller download for server-side or bundle-size-sensitive builds." >}}
 {{< /cardgrid >}}
 
-The import surface is identical between them; only the codec set differs. Code written
-against `wasmpeg` runs unchanged against `wasmpeg-full` — you only swap the package when you
-specifically need x264/x265 encode and can meet the GPL terms.
+The import surface is identical between them; only whether the WebGPU binary is present
+differs. Code written against `@wasmpeg/core` runs unchanged against `@wasmpeg/cpu` — it
+just never has a GPU path to fall into.
 
-| | `wasmpeg` | `wasmpeg-full` |
-|---|-----------|----------------|
-| License | LGPL-2.1-or-later | GPL-2.0-or-later |
+| | `@wasmpeg/core` | `@wasmpeg/cpu` |
+|---|-----------------|----------------|
+| License | LGPL-2.1-or-later | LGPL-2.1-or-later |
 | H.264 / H.265 decode | Yes | Yes |
-| H.264 / H.265 encode | No | Yes (libx264 / libx265) |
-| Use for closed-source | Yes | Only under GPL terms |
+| WebGPU scaling | Yes | No (CPU `swscale` only) |
 | Import surface | Identical | Identical |
+
+{{< aside type="note" >}}
+A GPL package adding H.264/H.265 **encode** via libx264/libx265 isn't published yet — the
+`gpl` build preset exists (see [building from source](/docs/build/from-source/)) but isn't
+shipped as an npm package.
+{{< /aside >}}
 
 ## Loading the module
 
@@ -105,7 +108,7 @@ directory is served depends on your setup:
 {{< tabs >}}
 {{< tab label="Bundler" group="tabgroup-1" first="true" >}}
 Most bundlers (Vite, webpack 5, Rollup, esbuild) handle the co-located `.wasm`
-automatically when you `import wasmpeg from 'wasmpeg'`. If your bundler doesn't emit
+automatically when you `import wasmpeg from '@wasmpeg/core'`. If your bundler doesn't emit
 the `.wasm` next to the JS, copy `node_modules/wasmpeg/dist/` into your static
 directory and point the loader at it:
 
@@ -129,7 +132,7 @@ unpkg). The `.wasm` is fetched relative to the JS module.
 {{< /tab >}}
 {{< tab label="Node ≥ 18" group="tabgroup-1" >}}
 ```js
-import wasmpeg from 'wasmpeg';
+import wasmpeg from '@wasmpeg/core';
 import { readFile } from 'node:fs/promises';
 
 await wasmpeg.load();

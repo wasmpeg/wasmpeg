@@ -54,7 +54,7 @@ different rate or channel count.
 Load the module, then open a decoder.
 
    ```js
-   import wasmpeg from 'wasmpeg';
+   import wasmpeg from '@wasmpeg/core';
    await wasmpeg.load();
 
    const aud = await wasmpeg.decodeAudio(file);

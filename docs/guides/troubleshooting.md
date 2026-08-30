@@ -216,10 +216,12 @@ identical there.
 No. It's an optional acceleration for scaling; everything works on the CPU build. See
 [WebGPU](/docs/webgpu/).
 
-### Which package — wasmpeg or wasmpeg-full?
+### Which package — @wasmpeg/core or @wasmpeg/cpu?
 
-`wasmpeg` (LGPL) for almost everyone; `wasmpeg-full` (GPL) only if you need H.264/H.265
-encode. Both decode H.264/H.265.
+`@wasmpeg/core` (CPU + WebGPU) for almost everyone; `@wasmpeg/cpu` if you don't need
+WebGPU and want the smaller download — server-side, or a bundle-size-sensitive build.
+Both are LGPL and decode H.264/H.265 identically; neither *encodes* it — that needs the
+GPL build, not published yet.
 
 ### Can I seek to a timestamp or trim a clip?
 

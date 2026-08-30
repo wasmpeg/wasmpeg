@@ -14,7 +14,7 @@ you may need to copy it into `public/` (covered at the end).
 Install:
 
    ```sh
-   npm install wasmpeg
+   npm install @wasmpeg/core
    ```
 {{% /step %}}
 {{% step %}}
@@ -24,7 +24,7 @@ Decode a frame in a component. Loading the module and opening the decoder both h
    ```vue
    <script setup>
    import { ref, onMounted, onBeforeUnmount } from 'vue';
-   import wasmpeg from 'wasmpeg';
+   import wasmpeg from '@wasmpeg/core';
 
    const props = defineProps({ file: { type: Object, required: true } });
    const canvas = ref(null);

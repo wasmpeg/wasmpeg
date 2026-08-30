@@ -16,7 +16,7 @@ Install, then copy the WASM into `public/`. Next serves `public/` at the site ro
    its `.wasm`:
 
    ```sh
-   npm install wasmpeg
+   npm install @wasmpeg/core
    cp node_modules/wasmpeg/dist/cpu.* public/wasmpeg/
    ```
 {{% /step %}}
@@ -26,7 +26,7 @@ Decode in a Client Component, loading from the path you copied to:
    ```tsx
    'use client';
    import { useEffect, useRef } from 'react';
-   import wasmpeg from 'wasmpeg';
+   import wasmpeg from '@wasmpeg/core';
 
    export function Thumbnail({ file }: { file: File }) {
        const ref = useRef<HTMLCanvasElement>(null);

@@ -14,7 +14,7 @@ Vite serves the package's co-located `.wasm` in dev and emits it on build with n
 applies to any Vite app — vanilla, React, Vue, or Svelte.
 
 ```sh
-npm install wasmpeg
+npm install @wasmpeg/core
 ```
 
 A React example (the same logic works in any component):
@@ -56,7 +56,7 @@ wasmpeg runs in the browser, so in Next.js it belongs in Client Components. Copy
 `public/` (served at the root):
 
 ```sh
-npm install wasmpeg
+npm install @wasmpeg/core
 cp node_modules/wasmpeg/dist/cpu.* public/wasmpeg/
 ```
 
@@ -105,7 +105,7 @@ runtime, not edge — wasmpeg needs Node's `fs`/`fetch` to load the `.wasm`.
 
 {{< tab label="Vue" group="tabgroup-0" >}}
 ```sh
-npm install wasmpeg
+npm install @wasmpeg/core
 ```
 
 ```vue
@@ -148,13 +148,13 @@ If the WASM 404s: `cp node_modules/wasmpeg/dist/cpu.* public/wasmpeg/` then
 
 {{< tab label="Svelte" group="tabgroup-0" >}}
 ```sh
-npm install wasmpeg
+npm install @wasmpeg/core
 ```
 
 ```svelte
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import wasmpeg from 'wasmpeg';
+    import wasmpeg from '@wasmpeg/core';
     export let file;
     let canvas, dec;
 
@@ -184,7 +184,7 @@ The same API runs in Node ≥ 18 — no browser, no native addons. Node has no W
 the CPU build is always used and the `.wasm` is read from disk.
 
 ```sh
-npm install wasmpeg
+npm install @wasmpeg/core
 ```
 
 ```js

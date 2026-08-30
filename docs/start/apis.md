@@ -8,9 +8,9 @@ Pick the **lowest** one you need.
 
 | Import | Level | Use when |
 |--------|-------|----------|
-| `import wasmpeg from 'wasmpeg'` | **High** | You have a `File`/`Blob`/`URL`/canvas and want frames, audio, metadata, or a thumbnail. **Start here.** |
-| `import { FFmpeg } from 'wasmpeg'` | **Compat** | You want the `load`/`writeFile`/`exec` surface and a virtual filesystem (migrating from `@ffmpeg/ffmpeg`). |
-| `import { gpu } from 'wasmpeg'` | **Low** | You already have raw bytes or RGBA in hand and want zero-overhead `createDecoder` / `createEncoder` / `scale` with manual lifecycle control. |
+| `import wasmpeg from '@wasmpeg/core'` | **High** | You have a `File`/`Blob`/`URL`/canvas and want frames, audio, metadata, or a thumbnail. **Start here.** |
+| `import { FFmpeg } from '@wasmpeg/core'` | **Compat** | You want the `load`/`writeFile`/`exec` surface and a virtual filesystem (migrating from `@ffmpeg/ffmpeg`). |
+| `import { gpu } from '@wasmpeg/core'` | **Low** | You already have raw bytes or RGBA in hand and want zero-overhead `createDecoder` / `createEncoder` / `scale` with manual lifecycle control. |
 
 The three aren't separate libraries — they're views onto the same WASM module. Every call,
 at every level, ends in the same exported C functions. Higher levels add convenience (input

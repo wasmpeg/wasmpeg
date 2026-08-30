@@ -4,7 +4,7 @@ description: "Compile the FFmpeg WASM binaries yourself with the Emscripten SDK 
 weight: 100
 ---
 You only need to build from source to change the codec set, hack on `src/pipeline.c`, or
-produce the GPL `wasmpeg-full` binaries. The npm package ships prebuilt `dist/*.wasm`.
+produce the GPL binaries — not published to npm yet. The LGPL packages ship prebuilt `dist/*.wasm`.
 
 ## Prerequisites
 
@@ -54,10 +54,10 @@ emsdk yourself:
 Codec selection is data-driven by a preset. The two shipping presets:
 
 ```sh
-# LGPL — the default wasmpeg package
+# LGPL — @wasmpeg/core and @wasmpeg/cpu
 PRESET=lgpl TARGET=cpu bash scripts/build.sh   # → dist/cpu.js + dist/cpu.wasm
 
-# GPL — wasmpeg-full, adds libx264/libx265 encode
+# GPL — not yet published, adds libx264/libx265 encode
 PRESET=gpl  TARGET=cpu bash scripts/build.sh   # → dist/gpl-cpu.js + dist/gpl-cpu.wasm
 ```
 

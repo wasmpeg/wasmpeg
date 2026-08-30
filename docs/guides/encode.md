@@ -62,7 +62,7 @@ Two of these are easy to mix up: `fmt` is the output muxer (what you're writing)
 Load and encode the first frame as JPEG.
 
    ```js
-   import wasmpeg from 'wasmpeg';
+   import wasmpeg from '@wasmpeg/core';
    await wasmpeg.load();
 
    const jpg = await wasmpeg.encode(file, { codec: 'mjpeg', frames: 1 });
@@ -136,9 +136,9 @@ encode fails. Keep the default `image2pipe` (or pass it explicitly) for image ou
 
 For video frames the default build ships `mjpeg`, `png`, `gif`, `bmp`, `tiff`, `tga`,
 `dpx`, `huffyuv`, and `ffv1`, plus audio encoders (`aac`, `opus`, `flac`, `mp2`,
-`wavpack`, and PCM / ADPCM variants). H.264 / H.265 *encode* is GPL-only and ships in
-`wasmpeg-full`. The [codec table](/docs/formats/codecs/) has the complete list and which build each
-encoder belongs to.
+`wavpack`, and PCM / ADPCM variants). H.264 / H.265 *encode* is GPL-only and isn't
+published to npm yet. The [codec table](/docs/formats/codecs/) has the complete list and
+which build each encoder belongs to.
 
 ## Notes
 

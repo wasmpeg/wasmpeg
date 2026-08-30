@@ -150,8 +150,8 @@ ffmpeg.wasm does (there's no transcode to track). For decode loops, your own cou
 
 ## Checklist
 
-1. Replace the `@ffmpeg/ffmpeg` + `@ffmpeg/core` install with `npm install wasmpeg`.
-2. Swap `import { FFmpeg } from '@ffmpeg/ffmpeg'` → `import { FFmpeg } from 'wasmpeg'`.
+1. Replace the `@ffmpeg/ffmpeg` + `@ffmpeg/core` install with `npm install @wasmpeg/core`.
+2. Swap `import { FFmpeg } from '@ffmpeg/ffmpeg'` → `import { FFmpeg } from '@wasmpeg/core'`.
 3. Delete `toBlobURL`/core-loading and any COOP/COEP server headers.
 4. Rework every `exec(); readFile('out.*')` to use the return value (or a high-level method).
 5. Confirm there's no file-to-file transcode in your flow — if there is, that part stays

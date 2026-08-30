@@ -50,7 +50,7 @@ Returns a `Uint8ClampedArray` of RGBA8 pixels, `dstW * dstH * 4` bytes.
 Load the module.
 
    ```js
-   import wasmpeg from 'wasmpeg';
+   import wasmpeg from '@wasmpeg/core';
    await wasmpeg.load();
    ```
 {{% /step %}}

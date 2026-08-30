@@ -79,12 +79,13 @@ A few specifics worth setting expectations on up front:
   container.
 - **Single-frame encode, not video encode.** `encode()` is built for thumbnails and
   stills. There's no audio/video muxing into a playable file from the high-level API.
-- **H.264/H.265 encode is GPL-only.** Decode of both is in the default build; encode
-  lives in `wasmpeg-full`.
+- **H.264/H.265 encode is GPL-only.** Decode of both is in `@wasmpeg/core`/`@wasmpeg/cpu`;
+  encode needs the GPL build, which isn't published as a package yet.
 
 {{< aside type="note" >}}
-H.264/H.265 **decode** is included in the default LGPL build. H.264/H.265 **encode**
-(via libx264/libx265) lives in the separate GPL `wasmpeg-full` package.
+H.264/H.265 **decode** is included in both LGPL packages. H.264/H.265 **encode** (via
+libx264/libx265) needs the separate GPL `gpl` build preset — see
+[building from source](/docs/build/from-source/) — which isn't published to npm yet.
 {{< /aside >}}
 
 ## How it compares to ffmpeg.wasm

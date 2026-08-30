@@ -14,7 +14,7 @@ the generated scripts** — they're overwritten on every build.
 | `minimal` | fast dev iteration | H.264/VP8 decode, AAC/MJPEG/PNG encode, basic filters |
 | `standard` | broad dev build | wide decode set, common encoders, all pipeline filters |
 | `lgpl` | the shipped **wasmpeg** | comprehensive decode, native encoders — all FFmpeg built-ins, safe for commercial use |
-| `gpl` | the shipped **wasmpeg-full** | everything in `lgpl` plus libx264/libx265 encode |
+| `gpl` | not yet published to npm | everything in `lgpl` plus libx264/libx265 encode |
 
 `gpl` inherits the entire `lgpl` set and extends it, so the two never drift — it's literally
 built as `[...PRESETS.lgpl.decoders, ...extras]` for each category.
@@ -109,7 +109,7 @@ Some codecs need an external library, supplied via Emscripten ports.
 |---------|-------------|-----------|---------|
 | zlib | `--enable-zlib` | `--use-port=zlib` | PNG decode, FLAC, MKV compression |
 | Dawn (WebGPU) | `--enable-webgpu` | `--use-port=emdawnwebgpu` | `scale_webgpu` (WebGPU target only) |
-| libx264 / libx265 | `--enable-libx264` / `--enable-libx265` (GPL) | cross-compiled wasm libs | H.264/H.265 encode in `wasmpeg-full` |
+| libx264 / libx265 | `--enable-libx264` / `--enable-libx265` (GPL) | cross-compiled wasm libs | H.264/H.265 encode, not yet published to npm |
 
 The WebGPU and x264/x265 rows are added automatically when you select the `webgpu` target
 or the `gpl` preset; you don't list them in a preset's `extraFlags` yourself for the

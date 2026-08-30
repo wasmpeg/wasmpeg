@@ -33,7 +33,7 @@ sections — that's the smaller side.
 wasmpeg is built to get pixels, samples, and metadata out of media. The decoder and
 demuxer coverage is broad; the encoder and muxer coverage is intentionally narrow
 (image codecs for thumbnails, a handful of audio codecs). H.264/H.265 **decode** is in
-this build; H.264/H.265 **encode** is GPL-only (`wasmpeg-full`).
+this build; H.264/H.265 **encode** is GPL-only and not published to npm yet.
 {{< /aside >}}
 
 ## Video decoders
@@ -188,8 +188,8 @@ Game and vendor variants: `adpcm_4xm` · `adpcm_afc` · `adpcm_dtk` · `adpcm_ea
 
 Image-oriented encoders for thumbnails and frame export, plus two intra-frame video
 codecs (`huffyuv`, `ffv1`) that write one independently-coded frame at a time. There is no
-inter-frame (P/B-frame) video encoder in the LGPL build; H.264/H.265 encode lives in
-`wasmpeg-full`. See [the GPL build](#the-gpl-build-wasmpeg-full) below.
+inter-frame (P/B-frame) video encoder in the LGPL build; H.264/H.265 encode needs the GPL
+preset. See [the GPL build](#the-gpl-build) below.
 
 ## Audio encoders
 
@@ -200,12 +200,14 @@ inter-frame (P/B-frame) video encoder in the LGPL build; H.264/H.265 encode live
 All of these are FFmpeg built-ins — no external library is linked — which is what keeps the
 default build LGPL-clean.
 
-## The GPL build (wasmpeg-full)
+## The GPL build
 
-Everything above is the **LGPL** build. The `gpl` preset (`wasmpeg-full`) inherits the
-entire LGPL component set and extends it; it never drifts from this list because it's
-defined as `[...lgpl, ...extras]` in `configure.mjs`. The intended extras are H.264 and
-H.265 **encode** via `libx264` / `libx265`, which are GPL-licensed external libraries.
+Everything above is the **LGPL** build (`@wasmpeg/core` / `@wasmpeg/cpu`). The `gpl`
+preset inherits the entire LGPL component set and extends it; it never drifts from this
+list because it's defined as `[...lgpl, ...extras]` in `configure.mjs`. The intended
+extras are H.264 and H.265 **encode** via `libx264` / `libx265`, which are GPL-licensed
+external libraries. This preset isn't published as an npm package yet — build it yourself
+from source if you need it now.
 
 {{< aside type="caution" >}}
 Linking the GPL binary into a closed-source product carries GPL obligations. The `libx264`

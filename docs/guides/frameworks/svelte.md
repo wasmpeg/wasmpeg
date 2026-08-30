@@ -14,7 +14,7 @@ of code that executes during SSR.
 Install:
 
    ```sh
-   npm install wasmpeg
+   npm install @wasmpeg/core
    ```
 {{% /step %}}
 {{% step %}}
@@ -24,7 +24,7 @@ Decode a frame. `onMount` runs only on the client, which is exactly where decodi
    ```svelte
    <script>
        import { onMount, onDestroy } from 'svelte';
-       import wasmpeg from 'wasmpeg';
+       import wasmpeg from '@wasmpeg/core';
 
        export let file;
        let canvas;
