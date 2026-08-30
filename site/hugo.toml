@@ -62,7 +62,7 @@ enableEmoji = false
   fateCoverage = "86.9"
   fateCorrectness = "93.3"
   ffmpegCoreSizeMB = "61.7"
-  contactEmail = "viju@wasmpeg.com"
+  contactEmail = "hello@wasmpeg.com"
 
 [[menu.main]]
   name = "Docs"
