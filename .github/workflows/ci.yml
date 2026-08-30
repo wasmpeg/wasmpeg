@@ -3,6 +3,7 @@ name: ci
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
 
 jobs:
   # a label-add re-fires this whole workflow but changes no commits — dco and
@@ -10,6 +11,7 @@ jobs:
   # re-running the same check for free.
   dco:
     if: |
+      github.event_name == 'pull_request' &&
       github.event.action != 'labeled' &&
       !contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump')
     runs-on: ubuntu-latest
@@ -34,6 +36,7 @@ jobs:
 
   quality:
     if: |
+      github.event_name == 'pull_request' &&
       github.event.action != 'labeled' &&
       !contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump')
     runs-on: ubuntu-latest
@@ -55,16 +58,16 @@ jobs:
       - name: fate arg-parser check
         run: node tests/fate-runner.mjs
 
-  # human PRs: gated behind the ok-to-test label (needs triage/write access).
-  # ffmpeg-bump PRs: bot-authored, known deterministic content, no fork-PR
-  # trust question — runs on its own, not behind dco/quality since those
-  # don't run for it either. always() so a skipped dco/quality doesn't also
-  # skip this (GitHub skips a job by default if anything in `needs` skipped).
+  # Only two ways in: an ffmpeg-bump PR (bot-authored, known deterministic
+  # content, no fork-PR trust question) or an explicit manual run — never a
+  # plain PR, so a fork can't get free compute just by opening one. always()
+  # so a skipped dco/quality doesn't also skip this (GitHub skips a job by
+  # default if anything in `needs` skipped).
   build:
     needs: [dco, quality]
     if: |
       always() &&
-      (contains(github.event.pull_request.labels.*.name, 'ok-to-test') ||
+      (github.event_name == 'workflow_dispatch' ||
        contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump'))
     runs-on: ubuntu-latest
     steps:
