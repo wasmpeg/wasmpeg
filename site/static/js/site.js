@@ -148,6 +148,35 @@
 
   const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  // Bounded edit distance — bails out past `max` instead of finishing the full
+  // matrix, since a typo-tolerance check only cares whether the distance is
+  // small, not what it actually is once it isn't.
+  const editDistance = (a, b, max) => {
+    if (Math.abs(a.length - b.length) > max) return max + 1;
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      let rowMin = i;
+      for (let j = 1; j <= b.length; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+        rowMin = Math.min(rowMin, cur[j]);
+      }
+      if (rowMin > max) return max + 1;
+      prev = cur;
+    }
+    return prev[b.length];
+  };
+
+  // Typo tolerance for a query word against a haystack: does any word in it
+  // sit within a length-scaled edit distance? Short words need an exact
+  // prefix or a 1-typo match; longer words tolerate 2.
+  const fuzzyWordHit = (queryWord, haystack) => {
+    if (queryWord.length < 3) return false;
+    const maxDist = queryWord.length <= 5 ? 1 : 2;
+    return haystack.split(/\W+/).some((w) => w.length >= 3 && editDistance(queryWord, w, maxDist) <= maxDist);
+  };
+
   const makeSnippet = (text, q) => {
     const lower = text.toLowerCase();
     const idx = lower.indexOf(q);
@@ -177,6 +206,11 @@
         else if (title.includes(q)) score = 50;
         else if (desc.includes(q)) score = 25;
         else if (content.includes(q)) score = 10;
+        // No exact substring anywhere — try a typo-tolerant match on the
+        // query as a whole word, so e.g. "webgup" or "codecs" (one letter
+        // off) still finds "webgpu" / "codec" instead of coming up empty.
+        else if (fuzzyWordHit(q, title)) score = 20;
+        else if (fuzzyWordHit(q, desc)) score = 8;
         return { item, score };
       })
       .filter((h) => h.score > 0)
