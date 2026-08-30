@@ -106,11 +106,16 @@ async function probe(input) {
  * For single-frame image encode (e.g. grab a JPEG thumbnail):
  *   const jpgBytes = await wasmpeg.encode(file, { fmt: 'image2', codec: 'mjpeg', width: 320, height: 240 });
  *
+ * A frame you already have — e.g. from `dec.nextFrame()` — can be passed directly too;
+ * it's a `Uint8ClampedArray`, same as `canvas`/`ImageData` are under the hood, so no
+ * DOM is required and this also works in Node:
+ *   const jpg = await wasmpeg.encode(frame, { width: dec.width, height: dec.height });
+ *
  * opts:
  *   fmt    — container format (e.g. 'image2', 'mp4', 'wav')
  *   codec  — encoder name (e.g. 'mjpeg', 'png', 'aac')
- *   width  — output width (defaults to source width)
- *   height — output height (defaults to source height)
+ *   width  — output width (source width; required when input is a raw frame)
+ *   height — output height (source height; required when input is a raw frame)
  *   fps    — frame rate as number or { num, den } (default 30)
  *   bitrate — target bitrate bits/s (0 = codec default)
  *   frames — max frames to encode (default: all)
@@ -119,7 +124,22 @@ async function probe(input) {
  */
 async function encode(input, opts = {}) {
     assertLoaded();
-    const norm = await normalizeInput(input);
+
+    // A raw decoded frame — same shape ImageData.data/canvas readback already
+    // produce, just without a DOM object wrapping it. dec.nextFrame() returns
+    // exactly this type, so encoding a frame you already have shouldn't need
+    // a browser-only ImageData/canvas detour (and can't in Node — ImageData
+    // isn't a global there). Shaped like normalizeInput's own rgba results so
+    // it flows through the same path below.
+    let norm;
+    if (input instanceof Uint8ClampedArray) {
+        if (!opts.width || !opts.height) {
+            throw new Error('encode(): a raw frame needs opts.width and opts.height');
+        }
+        norm = { rgba: input, width: opts.width, height: opts.height };
+    } else {
+        norm = await normalizeInput(input);
+    }
 
     let srcRgba, srcW, srcH;
     let dec = null;

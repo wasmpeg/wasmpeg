@@ -632,6 +632,21 @@ async function testEncodeBudget() {
     } finally {
         gpu.createDecoder = realCreate;
     }
+
+    // encode() also accepts a frame you already decoded — same Uint8ClampedArray
+    // shape dec.nextFrame() returns — without going through ImageData/canvas,
+    // which don't exist in Node.
+    const png2 = makeTinyPng(8, 8);
+    const d = gpu.createDecoder(new Uint8Array(png2));
+    const frame = d.nextFrame();
+    d.close();
+    const jpeg = await wasmpegApi.encode(frame, { width: 8, height: 8, codec: 'mjpeg' });
+    ok('encode(rawFrame, {width,height}) returns encoded bytes', jpeg.length > 0);
+    ok('encode(rawFrame, {width,height}) output is a JPEG', jpeg[0] === 0xff && jpeg[1] === 0xd8);
+
+    let threw = null;
+    try { await wasmpegApi.encode(frame, {}); } catch (e) { threw = e; }
+    ok('encode(rawFrame) without width/height throws', threw instanceof Error);
 }
 
 // ── 11. Single wasm instance ─────────────────────────────────────────────────
