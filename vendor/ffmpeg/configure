@@ -4302,12 +4302,8 @@ zoompan_filter_deps="swscale"
 zscale_filter_deps="libzimg const_nan"
 scale_vaapi_filter_deps="vaapi"
 scale_vt_filter_deps="videotoolbox VTPixelTransferSessionCreate"
-<<<<<<< HEAD
-scale_vulkan_filter_deps="vulkan spirv_compiler spirv_library"
-scale_webgpu_filter_deps="webgpu"
-=======
 scale_vulkan_filter_deps="vulkan spirv_compiler swscale"
->>>>>>> 1a18a18ebaf32bf61cae2f69f4bdf222cdaddf30
+scale_webgpu_filter_deps="webgpu"
 vpp_qsv_filter_deps="libmfx"
 vpp_qsv_filter_select="qsvvpp"
 xfade_opencl_filter_deps="opencl"
