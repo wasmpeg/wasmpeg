@@ -33,3 +33,4 @@ fate-suite/
 # OS
 .DS_Store
 Thumbs.db
+.wrangler/
