@@ -87,20 +87,19 @@ jobs:
       - name: verify
         run: make verify
 
-  # needs a self-hosted runner labeled "fate" with fate-suite already rsynced
-  # (rsync://fate-suite.ffmpeg.org/fate-suite/) — queues until one exists.
-  fate:
-    needs: [build]
-    if: |
-      always() && needs.build.result == 'success' &&
-      (contains(github.event.pull_request.labels.*.name, 'ok-to-test') ||
-       contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump'))
-    runs-on: [self-hosted, fate]
-    steps:
-      - uses: actions/checkout@v4
-
-      - run: rsync -a rsync://fate-suite.ffmpeg.org/fate-suite/ fate-suite/
-
-      - run: PRESET=gpl TARGET=cpu bash scripts/build.sh
-
-      - run: node tests/compat.mjs && node tests/fate.mjs --workers=2
+  # disabled until the self-hosted fate runner is up — running FATE locally for now.
+  # fate:
+  #   needs: [build]
+  #   if: |
+  #     always() && needs.build.result == 'success' &&
+  #     (contains(github.event.pull_request.labels.*.name, 'ok-to-test') ||
+  #      contains(github.event.pull_request.labels.*.name, 'ffmpeg-bump'))
+  #   runs-on: [self-hosted, fate]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - run: rsync -a rsync://fate-suite.ffmpeg.org/fate-suite/ fate-suite/
+  #
+  #     - run: PRESET=gpl TARGET=cpu bash scripts/build.sh
+  #
+  #     - run: node tests/compat.mjs && node tests/fate.mjs --workers=2
