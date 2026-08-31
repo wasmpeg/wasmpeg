@@ -1,0 +1,21 @@
+# One line per fuzz target: "dec:<decoder>" or "dem:<demuxer>".
+# This is the single source of truth for both build.sh and run.sh.
+# Scoped to what wasmpeg's lgpl preset actually ships and a user's untrusted
+# input is most likely to hit: modern web video/audio codecs, common images,
+# and the two containers browsers actually produce (mp4/mov, webm/mkv).
+dec:h264
+dec:hevc
+dec:vp8
+dec:vp9
+dec:av1
+dec:mjpeg
+dec:png
+dec:gif
+dec:webp
+dec:aac
+dec:mp3
+dec:opus
+dec:vorbis
+dec:flac
+dem:mov
+dem:matroska

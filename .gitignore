@@ -30,6 +30,10 @@ vendor/ffmpeg/config_components.h
 # fate test samples (local only, rsynced on demand)
 fate-suite/
 
+# fuzz corpus/crash output (local or CI-generated, not source)
+fuzz-corpus/
+fuzz-crashes/
+
 # OS
 .DS_Store
 Thumbs.db
